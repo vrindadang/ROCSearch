@@ -1,5 +1,5 @@
 import React from 'react';
-import { CompanyData, ReportMetadata, Charge, Director, OtherCompany } from '../types';
+import { CompanyData, ReportMetadata, Charge, Director, OtherCompany, AssociateSubsidiary, CommonDirectorship } from '../types';
 import { FIRM_DETAILS } from '../constants';
 import { formatCurrency, calculateAge } from '../utils/formatters';
 import { clsx, type ClassValue } from 'clsx';
@@ -20,10 +20,11 @@ export function ReportView({ data, metadata, onDataChange }: ReportViewProps) {
   const age = calculateAge(data.incorporationDate);
   const directors = data.directors || [];
   const charges = data.charges || [];
-  const relatedParties = data.relatedParties || [];
+  const associateSubsidiaries = data.associateSubsidiaries || [];
+  const commonDirectorships = data.commonDirectorships || [];
   
-  const openCharges = charges.filter(c => c.status === 'Open');
-  const satisfiedCharges = charges.filter(c => c.status === 'Satisfied');
+  const openCharges = charges.filter(c => c.status === 'Open' || (!c.satisfactionDate || c.satisfactionDate.trim() === '' || c.satisfactionDate.toLowerCase() === 'n/a'));
+  const satisfiedCharges = charges.filter(c => c.status === 'Satisfied' || (c.satisfactionDate && c.satisfactionDate.trim() !== '' && c.satisfactionDate.toLowerCase() !== 'n/a'));
 
   const updateDirector = (din: string, updates: Partial<Director>) => {
     if (!onDataChange) return;
@@ -51,9 +52,11 @@ export function ReportView({ data, metadata, onDataChange }: ReportViewProps) {
       if (d.din === directorDin) {
         const newCompany: OtherCompany = {
           id: Math.random().toString(36).substr(2, 9),
+          cin: '',
           name: '',
           status: '',
           appointmentDate: '',
+          cessationDate: '',
           industry: '',
           state: '',
           source: 'Manually added'
@@ -89,7 +92,7 @@ export function ReportView({ data, metadata, onDataChange }: ReportViewProps) {
   };
 
   const deleteCharge = (id: string) => {
-    if (!onDataChange || !window.confirm('Are you sure you want to delete this charge?')) return;
+    if (!onDataChange) return;
     const newCharges = charges.filter(c => c.id !== id);
     onDataChange({ charges: newCharges });
   };
@@ -115,12 +118,63 @@ export function ReportView({ data, metadata, onDataChange }: ReportViewProps) {
     };
     onDataChange({ charges: [...charges, newCharge] });
   };
+  
+  const updateAssociateSubsidiary = (id: string, updates: Partial<AssociateSubsidiary>) => {
+    if (!onDataChange) return;
+    const newList = associateSubsidiaries.map(a => a.id === id ? { ...a, ...updates } : a);
+    onDataChange({ associateSubsidiaries: newList });
+  };
+
+  const deleteAssociateSubsidiary = (id: string) => {
+    if (!onDataChange) return;
+    const newList = associateSubsidiaries.filter(a => a.id !== id);
+    onDataChange({ associateSubsidiaries: newList });
+  };
+
+  const addAssociateSubsidiary = () => {
+    if (!onDataChange) return;
+    const newItem: AssociateSubsidiary = {
+      id: Math.random().toString(36).substr(2, 9),
+      cin: '',
+      name: '',
+      nature: '',
+      sharesHeld: '',
+      source: 'Manually added'
+    };
+    onDataChange({ associateSubsidiaries: [...associateSubsidiaries, newItem] });
+  };
+
+  const updateCommonDirectorship = (id: string, updates: Partial<CommonDirectorship>) => {
+    if (!onDataChange) return;
+    const newList = commonDirectorships.map(c => c.id === id ? { ...c, ...updates } : c);
+    onDataChange({ commonDirectorships: newList });
+  };
+
+  const deleteCommonDirectorship = (id: string) => {
+    if (!onDataChange) return;
+    const newList = commonDirectorships.filter(c => c.id !== id);
+    onDataChange({ commonDirectorships: newList });
+  };
+
+  const addCommonDirectorship = () => {
+    if (!onDataChange) return;
+    const newItem: CommonDirectorship = {
+      id: Math.random().toString(36).substr(2, 9),
+      name: '',
+      status: '',
+      age: '',
+      state: '',
+      commonDirectorsCount: 0,
+      source: 'Manually added'
+    };
+    onDataChange({ commonDirectorships: [...commonDirectorships, newItem] });
+  };
 
   return (
-    <div className="bg-white shadow-2xl min-h-[29.7cm] p-[2cm] font-sans text-gray-900 print:shadow-none print:p-0 print-container relative group">
+    <div id="report-content" className="bg-white shadow-2xl min-h-[29.7cm] p-[2cm] font-sans text-gray-900 print:shadow-none print:p-0 print-container relative group">
       {/* Edit Mode Indicator */}
       {onDataChange && (
-        <div className="absolute top-4 right-4 bg-navy/10 text-navy px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider print:hidden">
+        <div className="absolute top-4 right-4 bg-[rgba(26,39,68,0.1)] text-navy px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider print:hidden">
           Edit Mode Active
         </div>
       )}
@@ -206,17 +260,27 @@ export function ReportView({ data, metadata, onDataChange }: ReportViewProps) {
               </tr>
             </thead>
             <tbody>
-              {directors.map((d, i) => (
-                <tr key={d.din} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                  <td className="border border-gray-200 p-2">{i + 1}</td>
-                  <td className="border border-gray-200 p-2 font-bold">{d.name}</td>
-                  <td className="border border-gray-200 p-2">{d.din}</td>
-                  <td className="border border-gray-200 p-2">{d.designation}</td>
-                  <td className="border border-gray-200 p-2">{d.appointmentDate}</td>
-                  <td className="border border-gray-200 p-2 text-center">{d.totalDirectorships}</td>
-                </tr>
-              ))}
-              {directors.length === 0 && (
+              {directors.length > 0 ? (
+                directors.map((d, i) => (
+                  <tr key={d.din || `dir-${i}`} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                    <td className="border border-gray-200 p-2">{i + 1}</td>
+                    <td className="border border-gray-200 p-2 font-bold">{d.name}</td>
+                    <td className="border border-gray-200 p-2">{d.din}</td>
+                    <td className="border border-gray-200 p-2">{d.designation}</td>
+                    <td className="border border-gray-200 p-2">{d.appointmentDate}</td>
+                    <td className="border border-gray-200 p-2 text-center">
+                      {onDataChange ? (
+                        <input 
+                          type="number"
+                          className="w-full bg-transparent outline-none focus:bg-white text-center"
+                          value={d.totalDirectorships}
+                          onChange={e => updateDirector(d.din, { totalDirectorships: Number(e.target.value) })}
+                        />
+                      ) : d.totalDirectorships}
+                    </td>
+                  </tr>
+                ))
+              ) : (
                 <tr key="no-directors">
                   <td colSpan={6} className="border border-gray-200 p-4 text-center text-gray-400 italic">No director data available</td>
                 </tr>
@@ -317,9 +381,9 @@ export function ReportView({ data, metadata, onDataChange }: ReportViewProps) {
         <section>
           <h3 className="text-sm font-bold mb-4">9. Directors Info and Other Directorships</h3>
           <div className="space-y-8">
-            {directors.map((d) => (
-              <div key={d.din}>
-                <div className="flex items-center justify-between mb-2 border-b border-navy/20 pb-1">
+            {directors.map((d, idx) => (
+              <div key={d.din || `dir-block-${idx}`}>
+                <div className="flex items-center justify-between mb-2 border-b border-[rgba(26,39,68,0.2)] pb-1">
                   <h4 className="text-xs font-bold text-navy uppercase">{d.name} ({d.din})</h4>
                   {d.isFetchingDirectorships && (
                     <div className="flex items-center gap-2 text-[10px] text-navy animate-pulse">
@@ -336,15 +400,16 @@ export function ReportView({ data, metadata, onDataChange }: ReportViewProps) {
                         <th className="border border-gray-200 p-1.5 text-left">Company Name</th>
                         <th className="border border-gray-200 p-1.5 text-left">Status</th>
                         <th className="border border-gray-200 p-1.5 text-left">Appt. Date</th>
+                        <th className="border border-gray-200 p-1.5 text-left">Cessation Date</th>
                         <th className="border border-gray-200 p-1.5 text-left">Industry</th>
                         <th className="border border-gray-200 p-1.5 text-left">State</th>
-                        <th className="border border-gray-200 p-1.5 text-left">Source</th>
+                        <th className="border border-gray-200 p-1.5 text-left print:hidden">Source</th>
                         {onDataChange && <th className="border border-gray-200 p-1.5 text-center w-8 print:hidden"></th>}
                       </tr>
                     </thead>
                     <tbody>
-                      {(d.otherCompanies || []).map((c) => (
-                        <tr key={c.id} className="group hover:bg-gray-50 transition-colors">
+                      {(d.otherCompanies || []).map((c, cIdx) => (
+                        <tr key={c.id || `other-${cIdx}`} className="group hover:bg-gray-50 transition-colors">
                           <td className="border border-gray-200 p-1.5 font-medium">
                             {onDataChange ? (
                               <input 
@@ -376,6 +441,15 @@ export function ReportView({ data, metadata, onDataChange }: ReportViewProps) {
                             {onDataChange ? (
                               <input 
                                 className="w-full bg-transparent outline-none focus:bg-white"
+                                value={c.cessationDate || ''}
+                                onChange={e => updateOtherCompany(d.din, c.id, { cessationDate: e.target.value })}
+                              />
+                            ) : c.cessationDate || '-'}
+                          </td>
+                          <td className="border border-gray-200 p-1.5">
+                            {onDataChange ? (
+                              <input 
+                                className="w-full bg-transparent outline-none focus:bg-white"
                                 value={c.industry}
                                 onChange={e => updateOtherCompany(d.din, c.id, { industry: e.target.value })}
                               />
@@ -390,7 +464,7 @@ export function ReportView({ data, metadata, onDataChange }: ReportViewProps) {
                               />
                             ) : c.state}
                           </td>
-                          <td className="border border-gray-200 p-1.5">
+                          <td className="border border-gray-200 p-1.5 print:hidden">
                             <span className={cn(
                               "px-1.5 py-0.5 rounded-full text-[8px] font-bold uppercase",
                               c.source === 'Auto-fetched' ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"
@@ -402,7 +476,7 @@ export function ReportView({ data, metadata, onDataChange }: ReportViewProps) {
                             <td className="border border-gray-200 p-1.5 text-center print:hidden">
                               <button 
                                 onClick={() => deleteOtherCompany(d.din, c.id)}
-                                className="text-red-400 hover:text-red-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                                className="text-red-400 hover:text-red-600 transition-colors"
                               >
                                 <Trash2 className="w-3 h-3" />
                               </button>
@@ -410,21 +484,21 @@ export function ReportView({ data, metadata, onDataChange }: ReportViewProps) {
                           )}
                         </tr>
                       ))}
-                      {(!d.otherCompanies || d.otherCompanies.length === 0) && !d.isFetchingDirectorships && (
+                      {(d.otherCompanies || []).length <= 1 && !d.isFetchingDirectorships && (
                         <tr key="no-other-directorships">
-                          <td colSpan={onDataChange ? 7 : 6} className="border border-gray-200 p-4 text-center">
+                          <td colSpan={onDataChange ? 8 : 7} className="border border-gray-200 p-4 text-center">
                             <div className="flex flex-col items-center gap-1">
-                              <span className="text-yellow-700 font-bold bg-yellow-50 px-3 py-1 rounded-full border border-yellow-200">
-                                No other directorships found in public records — please verify manually
+                              <span className="text-yellow-700 font-bold bg-yellow-50 px-3 py-1 rounded-full border border-yellow-200 print:hidden">
+                                ⚠️ No additional directorships found in public records for DIN {d.din}. Please add manually if required.
                               </span>
-                              {d.fetchError && <span className="text-[9px] text-red-500 italic">{d.fetchError}</span>}
+                              {d.fetchError && <span className="text-[9px] text-red-500 italic print:hidden">{d.fetchError}</span>}
                             </div>
                           </td>
                         </tr>
                       )}
                       {d.isFetchingDirectorships && (
                         <tr key="fetching-directorships">
-                          <td colSpan={onDataChange ? 7 : 6} className="border border-gray-200 p-8 text-center">
+                          <td colSpan={onDataChange ? 8 : 7} className="border border-gray-200 p-8 text-center">
                             <div className="flex flex-col items-center gap-2 text-navy">
                               <Loader2 className="w-6 h-6 animate-spin" />
                               <p className="text-xs font-medium">Searching MCA records...</p>
@@ -435,11 +509,17 @@ export function ReportView({ data, metadata, onDataChange }: ReportViewProps) {
                     </tbody>
                   </table>
                 </div>
+
+                {!d.isFetchingDirectorships && d.otherCompanies && d.otherCompanies.length > 1 && (
+                  <p className="mt-1 text-[8px] text-gray-500 italic print:hidden">
+                    Data fetched from public MCA records — verify before finalising
+                  </p>
+                )}
                 
                 {onDataChange && (
                   <button 
                     onClick={() => addOtherCompany(d.din)}
-                    className="mt-2 flex items-center gap-1.5 text-[9px] font-bold text-navy hover:text-navy/70 transition-colors uppercase tracking-wider print:hidden"
+                    className="mt-2 flex items-center gap-1.5 text-[9px] font-bold text-navy hover:text-[rgba(26,39,68,0.7)] transition-colors uppercase tracking-wider print:hidden"
                   >
                     <Plus className="w-3 h-3" />
                     Add Row
@@ -453,7 +533,7 @@ export function ReportView({ data, metadata, onDataChange }: ReportViewProps) {
         {/* Charges Summary */}
         <section>
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-sm font-bold">10. List of Open/Continuing Charges</h3>
+            <h3 className="text-sm font-bold">10. List of Continuing Charges</h3>
             {onDataChange && (
               <button 
                 onClick={addCharge}
@@ -469,72 +549,73 @@ export function ReportView({ data, metadata, onDataChange }: ReportViewProps) {
                 <th className="border border-navy p-2 text-left w-12">Sl.No</th>
                 <th className="border border-navy p-2 text-left">Charge ID</th>
                 <th className="border border-navy p-2 text-left">Charge Holder Name</th>
-                <th className="border border-navy p-2 text-left">Amount (Rs.)</th>
+                <th className="border border-navy p-2 text-left">Amount (In Rupees)</th>
                 <th className="border border-navy p-2 text-left">Date of Creation</th>
-                <th className="border border-navy p-2 text-left">Modification</th>
+                <th className="border border-navy p-2 text-left">Date of Last Modification</th>
                 {onDataChange && <th className="border border-navy p-2 text-center w-12 print:hidden">Actions</th>}
               </tr>
             </thead>
             <tbody>
-              {openCharges.map((c, i) => (
-                <tr key={c.id} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                  <td className="border border-gray-200 p-2">{i + 1}</td>
-                  <td className="border border-gray-200 p-2 font-bold">
-                    {onDataChange ? (
-                      <input 
-                        className="w-full bg-transparent outline-none focus:bg-white"
-                        value={c.id}
-                        onChange={e => updateCharge(c.id, { id: e.target.value })}
-                      />
-                    ) : c.id}
-                  </td>
-                  <td className="border border-gray-200 p-2">
-                    {onDataChange ? (
-                      <input 
-                        className="w-full bg-transparent outline-none focus:bg-white"
-                        value={c.bankName}
-                        onChange={e => updateCharge(c.id, { bankName: e.target.value })}
-                      />
-                    ) : c.bankName}
-                  </td>
-                  <td className="border border-gray-200 p-2">
-                    {onDataChange ? (
-                      <input 
-                        type="number"
-                        className="w-full bg-transparent outline-none focus:bg-white"
-                        value={c.amountSecured}
-                        onChange={e => updateCharge(c.id, { amountSecured: Number(e.target.value) })}
-                      />
-                    ) : formatCurrency(c.amountSecured)}
-                  </td>
-                  <td className="border border-gray-200 p-2">
-                    {onDataChange ? (
-                      <input 
-                        className="w-full bg-transparent outline-none focus:bg-white"
-                        value={c.creationDate}
-                        onChange={e => updateCharge(c.id, { creationDate: e.target.value })}
-                      />
-                    ) : c.creationDate}
-                  </td>
-                  <td className="border border-gray-200 p-2">
-                    {onDataChange ? (
-                      <input 
-                        className="w-full bg-transparent outline-none focus:bg-white"
-                        value={c.modificationDate || ''}
-                        onChange={e => updateCharge(c.id, { modificationDate: e.target.value })}
-                      />
-                    ) : c.modificationDate || 'N/A'}
-                  </td>
-                  {onDataChange && (
-                    <td className="border border-gray-200 p-2 text-center print:hidden">
-                      <button onClick={() => deleteCharge(c.id)} className="text-red-500 hover:text-red-700">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                      </button>
+              {openCharges.length > 0 ? (
+                openCharges.map((c, i) => (
+                  <tr key={c.id || `open-${i}`} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                    <td className="border border-gray-200 p-2">{i + 1}</td>
+                    <td className="border border-gray-200 p-2 font-bold">
+                      {onDataChange ? (
+                        <input 
+                          className="w-full bg-transparent outline-none focus:bg-white"
+                          value={c.id}
+                          onChange={e => updateCharge(c.id, { id: e.target.value })}
+                        />
+                      ) : c.id}
                     </td>
-                  )}
-                </tr>
-              ))}
-              {openCharges.length === 0 && (
+                    <td className="border border-gray-200 p-2">
+                      {onDataChange ? (
+                        <input 
+                          className="w-full bg-transparent outline-none focus:bg-white"
+                          value={c.bankName}
+                          onChange={e => updateCharge(c.id, { bankName: e.target.value })}
+                        />
+                      ) : c.bankName}
+                    </td>
+                    <td className="border border-gray-200 p-2">
+                      {onDataChange ? (
+                        <input 
+                          type="number"
+                          className="w-full bg-transparent outline-none focus:bg-white"
+                          value={c.amountSecured}
+                          onChange={e => updateCharge(c.id, { amountSecured: Number(e.target.value) })}
+                        />
+                      ) : formatCurrency(c.amountSecured)}
+                    </td>
+                    <td className="border border-gray-200 p-2">
+                      {onDataChange ? (
+                        <input 
+                          className="w-full bg-transparent outline-none focus:bg-white"
+                          value={c.creationDate}
+                          onChange={e => updateCharge(c.id, { creationDate: e.target.value })}
+                        />
+                      ) : c.creationDate}
+                    </td>
+                    <td className="border border-gray-200 p-2">
+                      {onDataChange ? (
+                        <input 
+                          className="w-full bg-transparent outline-none focus:bg-white"
+                          value={c.modificationDate || ''}
+                          onChange={e => updateCharge(c.id, { modificationDate: e.target.value })}
+                        />
+                      ) : c.modificationDate || 'N/A'}
+                    </td>
+                    {onDataChange && (
+                      <td className="border border-gray-200 p-2 text-center print:hidden">
+                        <button onClick={() => deleteCharge(c.id)} className="text-red-500 hover:text-red-700">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              ) : (
                 <tr key="no-open-charges">
                   <td colSpan={onDataChange ? 7 : 6} className="border border-gray-200 p-4 text-center text-gray-400 italic">No open charge data available</td>
                 </tr>
@@ -542,46 +623,47 @@ export function ReportView({ data, metadata, onDataChange }: ReportViewProps) {
             </tbody>
           </table>
 
-          <h3 className="text-sm font-bold mb-4">11. List of Satisfied/Closed Charges</h3>
+          <h3 className="text-sm font-bold mb-4">11. List of Satisfied Charges</h3>
           <table className="w-full border-collapse text-xs mb-8">
             <thead>
               <tr className="bg-gray-200 text-gray-700">
                 <th className="border border-gray-300 p-2 text-left w-12">Sl.No</th>
                 <th className="border border-gray-300 p-2 text-left">Charge ID</th>
-                <th className="border border-gray-300 p-2 text-left">Charge Holder Name</th>
-                <th className="border border-gray-300 p-2 text-left">Amount (Rs.)</th>
-                <th className="border border-gray-300 p-2 text-left">Creation Date</th>
-                <th className="border border-gray-300 p-2 text-left">Satisfaction Date</th>
+                <th className="border border-gray-300 p-2 text-left">Charge Holder</th>
+                <th className="border border-gray-300 p-2 text-left">Amount</th>
+                <th className="border border-gray-300 p-2 text-left">Date of Creation</th>
+                <th className="border border-gray-300 p-2 text-left">Date of Satisfaction</th>
                 {onDataChange && <th className="border border-gray-300 p-2 text-center w-12 print:hidden">Actions</th>}
               </tr>
             </thead>
             <tbody>
-              {satisfiedCharges.map((c, i) => (
-                <tr key={c.id} className="bg-white">
-                  <td className="border border-gray-200 p-2">{i + 1}</td>
-                  <td className="border border-gray-200 p-2">{c.id}</td>
-                  <td className="border border-gray-200 p-2">{c.bankName}</td>
-                  <td className="border border-gray-200 p-2">{formatCurrency(c.amountSecured)}</td>
-                  <td className="border border-gray-200 p-2">{c.creationDate}</td>
-                  <td className="border border-gray-200 p-2">
-                    {onDataChange ? (
-                      <input 
-                        className="w-full bg-transparent outline-none focus:bg-white"
-                        value={c.satisfactionDate || ''}
-                        onChange={e => updateCharge(c.id, { satisfactionDate: e.target.value })}
-                      />
-                    ) : c.satisfactionDate || 'N/A'}
-                  </td>
-                  {onDataChange && (
-                    <td className="border border-gray-200 p-2 text-center print:hidden">
-                      <button onClick={() => deleteCharge(c.id)} className="text-red-500 hover:text-red-700">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                      </button>
+              {satisfiedCharges.length > 0 ? (
+                satisfiedCharges.map((c, i) => (
+                  <tr key={c.id || `sat-${i}`} className="bg-white">
+                    <td className="border border-gray-200 p-2">{i + 1}</td>
+                    <td className="border border-gray-200 p-2">{c.id}</td>
+                    <td className="border border-gray-200 p-2">{c.bankName}</td>
+                    <td className="border border-gray-200 p-2">{formatCurrency(c.amountSecured)}</td>
+                    <td className="border border-gray-200 p-2">{c.creationDate}</td>
+                    <td className="border border-gray-200 p-2">
+                      {onDataChange ? (
+                        <input 
+                          className="w-full bg-transparent outline-none focus:bg-white"
+                          value={c.satisfactionDate || ''}
+                          onChange={e => updateCharge(c.id, { satisfactionDate: e.target.value })}
+                        />
+                      ) : c.satisfactionDate || 'N/A'}
                     </td>
-                  )}
-                </tr>
-              ))}
-              {satisfiedCharges.length === 0 && (
+                    {onDataChange && (
+                      <td className="border border-gray-200 p-2 text-center print:hidden">
+                        <button onClick={() => deleteCharge(c.id)} className="text-red-500 hover:text-red-700">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              ) : (
                 <tr key="no-satisfied-charges">
                   <td colSpan={onDataChange ? 7 : 6} className="border border-gray-200 p-4 text-center text-gray-400 italic">No satisfied charge data available</td>
                 </tr>
@@ -589,96 +671,97 @@ export function ReportView({ data, metadata, onDataChange }: ReportViewProps) {
             </tbody>
           </table>
 
-          <h3 className="text-sm font-bold mb-4">12. Detailed Charge Blocks</h3>
+          <h3 className="text-sm font-bold mb-4">12. Particulars of Charges</h3>
           <div className="space-y-8">
-            {charges.map((c, i) => (
-              <div key={c.id} className="break-inside-avoid relative group">
-                <div className="flex items-center justify-between mb-2">
-                  <h4 className="text-xs font-bold">Charge No. {i + 1} {c.isManual && <span className="ml-2 px-1.5 py-0.5 bg-navy/10 text-navy text-[8px] rounded uppercase">Manually entered</span>}</h4>
-                  {onDataChange && (
-                    <button onClick={() => deleteCharge(c.id)} className="text-red-500 opacity-0 group-hover:opacity-100 transition-opacity print:hidden">
-                      <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                    </button>
-                  )}
+            {openCharges.map((c, i) => (
+              <div key={c.id || `charge-block-${i}`} className="break-inside-avoid relative group">
+                <div className="mb-4">
+                  <div className="flex items-center justify-between mb-1">
+                    <h4 className="text-xs font-bold text-navy">
+                      {i + 1}. Charge Created on {c.creationDate || '[DATE]'} vide charge ID number {c.id || '[ID]'}
+                      {c.isManual && <span className="ml-2 px-1.5 py-0.5 bg-[rgba(26,39,68,0.1)] text-navy text-[8px] rounded uppercase">Manually entered</span>}
+                    </h4>
+                    {onDataChange && (
+                      <button onClick={() => deleteCharge(c.id)} className="text-red-500 hover:text-red-700 transition-colors print:hidden">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                      </button>
+                    )}
+                  </div>
+                  
+                  <div className="grid grid-cols-1 border border-gray-200 text-[10px]">
+                    <ChargeDetail 
+                      label="Name & Address of the Person/Institution In Whose Favour Charge is Created" 
+                      value={`${c.bankName || 'Not Available'}${c.bankAddress ? `\n${c.bankAddress}` : '\nAddress not available in records'}`} 
+                      metadata={c.needsVerification ? { needsVerification: true, message: c.verificationMessage || '' } : undefined}
+                      onChange={v => {
+                        const parts = v.split('\n');
+                        updateCharge(c.id, { bankName: parts[0], bankAddress: parts.slice(1).join('\n') });
+                      }}
+                    />
+                    <ChargeDetail 
+                      label="Amount Secured By the Charge" 
+                      value={`Rs. ${formatCurrency(c.amountSecured)}\n(${c.amountInWords || 'Amount in words not available'})`} 
+                      metadata={c.needsVerification ? { needsVerification: true, message: c.verificationMessage || '' } : undefined}
+                      onChange={v => {
+                        const parts = v.split('\n');
+                        const match = parts[0].match(/[\d,]+/);
+                        if (match) {
+                          const num = Number(match[0].replace(/,/g, ''));
+                          updateCharge(c.id, { amountSecured: num, amountInWords: parts.slice(1).join('\n').replace(/^\(|\)$/g, '') });
+                        }
+                      }}
+                    />
+                    <ChargeDetail 
+                      label="Brief Particulars of the Property Charged" 
+                      value={c.propertyCharged || "Not Available"} 
+                      metadata={c.needsVerification ? { needsVerification: true, message: c.verificationMessage || '' } : undefined}
+                      onChange={v => updateCharge(c.id, { propertyCharged: v, isDetailed: true })}
+                    />
+                    <ChargeDetail 
+                      label="Terms and Conditions" 
+                      value={c.termsAndConditions || "Not Available"} 
+                      metadata={c.needsVerification ? { needsVerification: true, message: c.verificationMessage || '' } : undefined}
+                      onChange={v => updateCharge(c.id, { termsAndConditions: v, isDetailed: true })}
+                    />
+                    <ChargeDetail 
+                      label="Margin" 
+                      value={c.margin || "Not Available"} 
+                      metadata={c.needsVerification ? { needsVerification: true, message: c.verificationMessage || '' } : undefined}
+                      onChange={v => updateCharge(c.id, { margin: v, isDetailed: true })}
+                    />
+                    <ChargeDetail 
+                      label="Terms of Repayment" 
+                      value={c.repaymentTerms || "Not Available"} 
+                      metadata={c.needsVerification ? { needsVerification: true, message: c.verificationMessage || '' } : undefined}
+                      onChange={v => updateCharge(c.id, { repaymentTerms: v, isDetailed: true })}
+                    />
+                    <ChargeDetail 
+                      label="Extent and Operation of the Charge" 
+                      value={c.extentOfCharge || "Not Available"} 
+                      metadata={c.needsVerification ? { needsVerification: true, message: c.verificationMessage || '' } : undefined}
+                      onChange={v => updateCharge(c.id, { extentOfCharge: v, isDetailed: true })}
+                    />
+                  </div>
                 </div>
-                <div className="grid grid-cols-2 border border-gray-200 text-[10px]">
-                  <ChargeDetail 
-                    label="Charge ID" 
-                    value={c.id} 
-                    metadata={c.needsVerification ? { needsVerification: true, message: c.verificationMessage || '' } : undefined}
-                    onChange={v => updateCharge(c.id, { id: v })}
-                  />
-                  <ChargeDetail 
-                    label="Bank/Institution" 
-                    value={c.bankName} 
-                    metadata={c.needsVerification ? { needsVerification: true, message: c.verificationMessage || '' } : undefined}
-                    onChange={v => updateCharge(c.id, { bankName: v })}
-                  />
-                  <ChargeDetail 
-                    label="Amount Secured" 
-                    value={`${formatCurrency(c.amountSecured)} (${c.amountInWords})`} 
-                    className="col-span-2"
-                    metadata={c.needsVerification ? { needsVerification: true, message: c.verificationMessage || '' } : undefined}
-                    onChange={v => {
-                      // Simple parsing for amount if edited in detailed block
-                      const match = v.match(/[\d,]+/);
-                      if (match) {
-                        const num = Number(match[0].replace(/,/g, ''));
-                        updateCharge(c.id, { amountSecured: num });
-                      }
-                    }}
-                  />
-                  <ChargeDetail 
-                    label="Property Description" 
-                    value={c.propertyCharged} 
-                    className="col-span-2"
-                    isMissing={!c.isDetailed}
-                    metadata={c.needsVerification ? { needsVerification: true, message: c.verificationMessage || '' } : undefined}
-                    onChange={v => updateCharge(c.id, { propertyCharged: v, isDetailed: true })}
-                  />
-                  <ChargeDetail 
-                    label="Terms & Conditions" 
-                    value={c.termsAndConditions} 
-                    className="col-span-2"
-                    isMissing={!c.isDetailed}
-                    metadata={c.needsVerification ? { needsVerification: true, message: c.verificationMessage || '' } : undefined}
-                    onChange={v => updateCharge(c.id, { termsAndConditions: v, isDetailed: true })}
-                  />
-                  <ChargeDetail 
-                    label="Margin" 
-                    value={c.margin} 
-                    isMissing={!c.isDetailed}
-                    metadata={c.needsVerification ? { needsVerification: true, message: c.verificationMessage || '' } : undefined}
-                    onChange={v => updateCharge(c.id, { margin: v, isDetailed: true })}
-                  />
-                  <ChargeDetail 
-                    label="Repayment Terms" 
-                    value={c.repaymentTerms} 
-                    isMissing={!c.isDetailed}
-                    metadata={c.needsVerification ? { needsVerification: true, message: c.verificationMessage || '' } : undefined}
-                    onChange={v => updateCharge(c.id, { repaymentTerms: v, isDetailed: true })}
-                  />
-                  <ChargeDetail 
-                    label="Extent of Charge" 
-                    value={c.extentOfCharge} 
-                    className="col-span-2"
-                    isMissing={!c.isDetailed}
-                    metadata={c.needsVerification ? { needsVerification: true, message: c.verificationMessage || '' } : undefined}
-                    onChange={v => updateCharge(c.id, { extentOfCharge: v, isDetailed: true })}
-                  />
-                  <ChargeDetail 
-                    label="Date of Creation" 
-                    value={c.creationDate} 
-                    metadata={c.needsVerification ? { needsVerification: true, message: c.verificationMessage || '' } : undefined}
-                    onChange={v => updateCharge(c.id, { creationDate: v })}
-                  />
-                  <ChargeDetail 
-                    label="Status" 
-                    value={c.status} 
-                    metadata={c.needsVerification ? { needsVerification: true, message: c.verificationMessage || '' } : undefined}
-                    onChange={v => updateCharge(c.id, { status: v as any })}
-                  />
-                </div>
+
+                {/* Modification Sub-block */}
+                {c.modificationDate && c.modificationDate !== 'N/A' && (
+                  <div className="ml-8 mt-4 border-l-2 border-navy/20 pl-4">
+                    <h4 className="text-xs font-bold text-navy mb-2">
+                      {i + 1}.1M Charge Modification on {c.modificationDate} vide charge ID number {c.id}
+                    </h4>
+                    <div className="grid grid-cols-1 border border-gray-200 text-[10px] opacity-90">
+                      <div className="p-2 bg-gray-50 italic text-[9px] text-gray-500 border-b border-gray-200">
+                        Modification details as per MCA records:
+                      </div>
+                      <ChargeDetail 
+                        label="Updated Amount/Terms" 
+                        value={`${formatCurrency(c.amountSecured)}\nModified on: ${c.modificationDate}`}
+                        onChange={v => updateCharge(c.id, { modificationDate: v.split('Modified on: ')[1] || c.modificationDate })}
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -687,35 +770,197 @@ export function ReportView({ data, metadata, onDataChange }: ReportViewProps) {
         {/* Related Parties */}
         <section>
           <h3 className="text-sm font-bold mb-4">13. Potential Related Parties</h3>
-          <table className="w-full border-collapse text-xs">
-            <thead>
-              <tr className="bg-navy text-white">
-                <th className="border border-navy p-2 text-left">S.No</th>
-                <th className="border border-navy p-2 text-left">Company Name</th>
-                <th className="border border-navy p-2 text-left">Status</th>
-                <th className="border border-navy p-2 text-left">Age</th>
-                <th className="border border-navy p-2 text-left">State</th>
-                <th className="border border-navy p-2 text-left">Common Directors</th>
-              </tr>
-            </thead>
-            <tbody>
-              {relatedParties.map((rp, i) => (
-                <tr key={i} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                  <td className="border border-gray-200 p-2">{i + 1}</td>
-                  <td className="border border-gray-200 p-2 font-bold">{rp.name}</td>
-                  <td className="border border-gray-200 p-2">{rp.status}</td>
-                  <td className="border border-gray-200 p-2">{rp.age}</td>
-                  <td className="border border-gray-200 p-2">{rp.state}</td>
-                  <td className="border border-gray-200 p-2 text-center font-bold">{rp.commonDirectorsCount}</td>
-                </tr>
-              ))}
-              {relatedParties.length === 0 && (
-                <tr key="no-related-parties">
-                  <td colSpan={6} className="border border-gray-200 p-4 text-center text-gray-400 italic">No potential related parties identified</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+          
+          <div className="space-y-8">
+            {/* Table A: Associate / Subsidiary */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-xs font-bold text-navy uppercase">A. Associate / Subsidiary Companies (as per MGT-7)</h4>
+                {onDataChange && (
+                  <button 
+                    onClick={addAssociateSubsidiary}
+                    className="flex items-center gap-1 text-[10px] font-bold text-navy hover:text-navy/70 transition-colors print:hidden"
+                  >
+                    <Plus className="w-3 h-3" />
+                    Add Row
+                  </button>
+                )}
+              </div>
+              <table className="w-full border-collapse text-[10px]">
+                <thead>
+                  <tr className="bg-navy text-white">
+                    <th className="border border-navy p-1.5 text-left w-8">S.No</th>
+                    <th className="border border-navy p-1.5 text-left">CIN/FCRN</th>
+                    <th className="border border-navy p-1.5 text-left">Name of Company</th>
+                    <th className="border border-navy p-1.5 text-left">Nature (Holding/Subsidiary/Associate/JV)</th>
+                    <th className="border border-navy p-1.5 text-left">% of Shares Held</th>
+                    {onDataChange && <th className="border border-navy p-1.5 text-center w-8 print:hidden"></th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {associateSubsidiaries.length > 0 ? (
+                    associateSubsidiaries.map((a, i) => (
+                      <tr key={a.id || `as-${i}`} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                        <td className="border border-gray-200 p-1.5 text-center">{i + 1}</td>
+                        <td className="border border-gray-200 p-1.5">
+                          {onDataChange ? (
+                            <input 
+                              className="w-full bg-transparent outline-none focus:bg-white"
+                              value={a.cin}
+                              onChange={e => updateAssociateSubsidiary(a.id, { cin: e.target.value })}
+                            />
+                          ) : a.cin}
+                        </td>
+                        <td className="border border-gray-200 p-1.5 font-bold">
+                          {onDataChange ? (
+                            <input 
+                              className="w-full bg-transparent outline-none focus:bg-white"
+                              value={a.name}
+                              onChange={e => updateAssociateSubsidiary(a.id, { name: e.target.value })}
+                            />
+                          ) : a.name}
+                        </td>
+                        <td className="border border-gray-200 p-1.5">
+                          {onDataChange ? (
+                            <input 
+                              className="w-full bg-transparent outline-none focus:bg-white"
+                              value={a.nature}
+                              onChange={e => updateAssociateSubsidiary(a.id, { nature: e.target.value })}
+                            />
+                          ) : a.nature}
+                        </td>
+                        <td className="border border-gray-200 p-1.5 text-center">
+                          {onDataChange ? (
+                            <input 
+                              className="w-full bg-transparent outline-none focus:bg-white text-center"
+                              value={a.sharesHeld}
+                              onChange={e => updateAssociateSubsidiary(a.id, { sharesHeld: e.target.value })}
+                            />
+                          ) : a.sharesHeld}
+                        </td>
+                        {onDataChange && (
+                          <td className="border border-gray-200 p-1.5 text-center print:hidden">
+                            <button 
+                              onClick={() => deleteAssociateSubsidiary(a.id)}
+                              className="text-red-400 hover:text-red-600 transition-colors"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    ))
+                  ) : (
+                    <tr key="no-associate">
+                      <td colSpan={onDataChange ? 6 : 5} className="border border-gray-200 p-4 text-center text-gray-400 italic">
+                        No data found in MGT-7 — please verify manually
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Table B: Common Directorship */}
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h4 className="text-xs font-bold text-navy uppercase">B. Companies with Common Directorship</h4>
+                {onDataChange && (
+                  <button 
+                    onClick={addCommonDirectorship}
+                    className="flex items-center gap-1 text-[10px] font-bold text-navy hover:text-navy/70 transition-colors print:hidden"
+                  >
+                    <Plus className="w-3 h-3" />
+                    Add Row
+                  </button>
+                )}
+              </div>
+              <table className="w-full border-collapse text-[10px]">
+                <thead>
+                  <tr className="bg-navy text-white">
+                    <th className="border border-navy p-1.5 text-left w-8">S.No</th>
+                    <th className="border border-navy p-1.5 text-left">Company Name</th>
+                    <th className="border border-navy p-1.5 text-left">Status</th>
+                    <th className="border border-navy p-1.5 text-left">Age</th>
+                    <th className="border border-navy p-1.5 text-left">State</th>
+                    <th className="border border-navy p-1.5 text-left">No. of Common Directors</th>
+                    {onDataChange && <th className="border border-navy p-1.5 text-center w-8 print:hidden"></th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {commonDirectorships.length > 0 ? (
+                    commonDirectorships.map((cd, i) => (
+                      <tr key={cd.id || `cd-${i}`} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                        <td className="border border-gray-200 p-1.5 text-center">{i + 1}</td>
+                        <td className="border border-gray-200 p-1.5 font-bold">
+                          {onDataChange ? (
+                            <input 
+                              className="w-full bg-transparent outline-none focus:bg-white"
+                              value={cd.name}
+                              onChange={e => updateCommonDirectorship(cd.id, { name: e.target.value })}
+                            />
+                          ) : cd.name}
+                        </td>
+                        <td className="border border-gray-200 p-1.5">
+                          {onDataChange ? (
+                            <input 
+                              className="w-full bg-transparent outline-none focus:bg-white"
+                              value={cd.status}
+                              onChange={e => updateCommonDirectorship(cd.id, { status: e.target.value })}
+                            />
+                          ) : cd.status}
+                        </td>
+                        <td className="border border-gray-200 p-1.5">
+                          {onDataChange ? (
+                            <input 
+                              className="w-full bg-transparent outline-none focus:bg-white"
+                              value={cd.age}
+                              onChange={e => updateCommonDirectorship(cd.id, { age: e.target.value })}
+                            />
+                          ) : cd.age}
+                        </td>
+                        <td className="border border-gray-200 p-1.5">
+                          {onDataChange ? (
+                            <input 
+                              className="w-full bg-transparent outline-none focus:bg-white"
+                              value={cd.state}
+                              onChange={e => updateCommonDirectorship(cd.id, { state: e.target.value })}
+                            />
+                          ) : cd.state}
+                        </td>
+                        <td className="border border-gray-200 p-1.5 text-center font-bold">
+                          {onDataChange ? (
+                            <input 
+                              type="number"
+                              className="w-full bg-transparent outline-none focus:bg-white text-center"
+                              value={cd.commonDirectorsCount}
+                              onChange={e => updateCommonDirectorship(cd.id, { commonDirectorsCount: Number(e.target.value) })}
+                            />
+                          ) : cd.commonDirectorsCount}
+                        </td>
+                        {onDataChange && (
+                          <td className="border border-gray-200 p-1.5 text-center print:hidden">
+                            <button 
+                              onClick={() => deleteCommonDirectorship(cd.id)}
+                              className="text-red-400 hover:text-red-600 transition-colors"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    ))
+                  ) : (
+                    <tr key="no-common">
+                      <td colSpan={onDataChange ? 7 : 6} className="border border-gray-200 p-4 text-center text-gray-400 italic">
+                        No common directorships identified — please verify manually
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
         </section>
       </div>
 
@@ -815,7 +1060,7 @@ function ChargeDetail({
               (isMissing || metadata?.needsVerification) && "text-yellow-800 italic"
             )}
             rows={1}
-            value={isMissing ? 'Details not available — CHG file not uploaded' : (value || '')}
+            value={value || 'Not Available'}
             onChange={e => onChange(e.target.value)}
             onInput={(e) => {
               const target = e.target as HTMLTextAreaElement;
@@ -828,7 +1073,7 @@ function ChargeDetail({
             "font-medium text-gray-900",
             (isMissing || metadata?.needsVerification) && "text-yellow-800 italic"
           )}>
-            {isMissing ? 'Details not available — CHG file not uploaded' : (value || 'N/A')}
+            {value || 'Not Available'}
           </span>
         )}
         {metadata?.needsVerification && (

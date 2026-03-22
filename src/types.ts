@@ -13,9 +13,11 @@ export interface Director {
 
 export interface OtherCompany {
   id: string;
+  cin?: string;
   name: string;
   status: string;
   appointmentDate: string;
+  cessationDate?: string;
   industry: string;
   state: string;
   source: 'Auto-fetched' | 'Manually added';
@@ -49,12 +51,23 @@ export interface Charge {
   verificationMessage?: string;
 }
 
-export interface RelatedParty {
+export interface AssociateSubsidiary {
+  id: string;
+  cin: string;
+  name: string;
+  nature: string;
+  sharesHeld: string;
+  source: 'Auto-fetched' | 'Manually added';
+}
+
+export interface CommonDirectorship {
+  id: string;
   name: string;
   status: string;
   age: string;
   state: string;
   commonDirectorsCount: number;
+  source: 'Auto-fetched' | 'Manually added';
 }
 
 export interface CompanyData {
@@ -76,7 +89,8 @@ export interface CompanyData {
   lastBalanceSheetDate: string;
   directors: Director[];
   charges: Charge[];
-  relatedParties: RelatedParty[];
+  associateSubsidiaries: AssociateSubsidiary[];
+  commonDirectorships: CommonDirectorship[];
   fieldMetadata?: Record<string, { needsVerification: boolean; message: string }>;
 }
 

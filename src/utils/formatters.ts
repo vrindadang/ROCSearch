@@ -46,11 +46,10 @@ export function numberToWords(num: number): string {
 }
 
 export function formatCurrency(num: number): string {
+  if (num === undefined || num === null) return '0';
   return new Intl.NumberFormat('en-IN', {
-    style: 'currency',
-    currency: 'INR',
     maximumFractionDigits: 0,
-  }).format(num);
+  }).format(num).replace(/\u00A0/g, ' ').replace(/\u202F/g, ' ');
 }
 
 export function calculateAge(incorporationDate: string): string {

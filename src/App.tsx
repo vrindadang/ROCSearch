@@ -3,11 +3,12 @@ import { Sidebar } from './components/Sidebar';
 import { ReportView } from './components/ReportView';
 import { TopBar } from './components/TopBar';
 import { ManualChargeModal } from './components/ManualChargeModal';
-import { CompanyData, ReportMetadata, FileStatus, Charge, UploadLog, Director, OtherCompany } from './types';
+import { CompanyData, ReportMetadata, FileStatus, Charge, UploadLog, Director, OtherCompany, CommonDirectorship, AssociateSubsidiary } from './types';
 import { extractTextFromFile } from './utils/parsers';
 import { parseCompanyFiles, fetchOtherDirectorships } from './utils/gemini';
 import { numberToWords } from './utils/formatters';
-import { exportToWord } from './utils/export';
+import { validateAndFixAmount } from './utils/validation';
+import { generatePDF, generateWord } from './utils/exportUtils';
 import { motion, AnimatePresence } from 'motion/react';
 import { AlertTriangle, CheckCircle2, Loader2, XCircle, Info, History } from 'lucide-react';
 
@@ -30,7 +31,8 @@ const INITIAL_COMPANY_DATA: CompanyData = {
   lastBalanceSheetDate: '',
   directors: [],
   charges: [],
-  relatedParties: [],
+  associateSubsidiaries: [],
+  commonDirectorships: [],
 };
 
 const INITIAL_METADATA: ReportMetadata = {
@@ -71,34 +73,137 @@ export default function App() {
 
     try {
       const result = await fetchOtherDirectorships(director.name, director.din);
-      const otherCompanies: OtherCompany[] = (result.otherCompanies || []).map((c: any) => ({
-        ...c,
-        id: Math.random().toString(36).substr(2, 9),
-        source: 'Auto-fetched'
-      }));
+      
+      setCompanyData(prev => {
+        // Create subject company entry
+        const subjectCompany: OtherCompany = {
+          id: 'subject-' + director.din,
+          name: prev.companyName,
+          status: prev.status,
+          appointmentDate: director.appointmentDate,
+          industry: prev.industryDescription,
+          state: prev.registeredAddress.split(',').pop()?.trim() || '',
+          source: 'Auto-fetched'
+        };
 
-      setCompanyData(prev => ({
-        ...prev,
-        directors: prev.directors.map(d => 
+        const fetchedCompanies: OtherCompany[] = (result.otherCompanies || [])
+          .filter((c: any) => c.name.toLowerCase() !== prev.companyName.toLowerCase()) // De-duplicate subject company
+          .map((c: any) => ({
+            ...c,
+            id: Math.random().toString(36).substr(2, 9),
+            source: 'Auto-fetched'
+          }));
+
+        let otherCompanies = [subjectCompany, ...fetchedCompanies];
+
+        // If only subject company found, add an empty row for manual input as requested
+        if (otherCompanies.length === 1) {
+          otherCompanies.push({
+            id: Math.random().toString(36).substr(2, 9),
+            cin: '',
+            name: '',
+            status: '',
+            appointmentDate: '',
+            cessationDate: '',
+            industry: '',
+            state: '',
+            source: 'Manually added'
+          });
+        }
+
+        // Update director's other companies
+        const updatedDirectors = prev.directors.map(d => 
           d.din === director.din ? { 
             ...d, 
             otherCompanies, 
             isFetchingDirectorships: false 
           } : d
-        )
-      }));
+        );
+
+        // Recalculate common directorships
+        const commonMap = new Map<string, CommonDirectorship>();
+        // Existing common directorships (keep manual ones)
+        (prev.commonDirectorships || []).forEach(cd => {
+          if (cd.source === 'Manually added') commonMap.set(cd.name, cd);
+        });
+
+        // Collect all other companies from all directors
+        const allOtherCompanies: Record<string, { name: string, status: string, age: string, state: string, directors: Set<string> }> = {};
+        
+        updatedDirectors.forEach(d => {
+          (d.otherCompanies || []).forEach(oc => {
+            if (oc.name.toLowerCase() === prev.companyName.toLowerCase()) return; // Skip subject company in common directorships
+
+            if (!allOtherCompanies[oc.name]) {
+              allOtherCompanies[oc.name] = {
+                name: oc.name,
+                status: oc.status,
+                age: 'N/A',
+                state: oc.state,
+                directors: new Set()
+              };
+            }
+            allOtherCompanies[oc.name].directors.add(d.name);
+          });
+        });
+
+        Object.values(allOtherCompanies).forEach(oc => {
+          commonMap.set(oc.name, {
+            id: Math.random().toString(36).substr(2, 9),
+            name: oc.name,
+            status: oc.status,
+            age: oc.age,
+            state: oc.state,
+            commonDirectorsCount: oc.directors.size,
+            source: 'Auto-fetched'
+          });
+        });
+
+        return {
+          ...prev,
+          directors: updatedDirectors,
+          commonDirectorships: Array.from(commonMap.values())
+        };
+      });
     } catch (err) {
       console.error(`Error fetching directorships for ${director.name}:`, err);
-      setCompanyData(prev => ({
-        ...prev,
-        directors: prev.directors.map(d => 
-          d.din === director.din ? { 
-            ...d, 
-            isFetchingDirectorships: false,
-            fetchError: 'Failed to fetch public records'
-          } : d
-        )
-      }));
+      setCompanyData(prev => {
+        // Even on error, add subject company
+        const subjectCompany: OtherCompany = {
+          id: 'subject-' + director.din,
+          name: prev.companyName,
+          status: prev.status,
+          appointmentDate: director.appointmentDate,
+          industry: prev.industryDescription,
+          state: prev.registeredAddress.split(',').pop()?.trim() || '',
+          source: 'Auto-fetched'
+        };
+
+        return {
+          ...prev,
+          directors: prev.directors.map(d => 
+            d.din === director.din ? { 
+              ...d, 
+              otherCompanies: [
+                subjectCompany,
+                {
+                  id: Math.random().toString(36).substr(2, 9),
+                  cin: '',
+                  name: '',
+                  status: '',
+                  appointmentDate: '',
+                  cessationDate: '',
+                  industry: '',
+                  state: '',
+                  source: 'Manually added'
+                }
+              ],
+              isFetchingDirectorships: false,
+              fetchError: 'Failed to fetch public records'
+            } : d
+          )
+        };
+      });
     }
   };
 
@@ -146,9 +251,17 @@ export default function App() {
           // 1. Merge basic fields
           if (parsedData && typeof parsedData === 'object') {
             Object.keys(parsedData).forEach(key => {
-              if (['directors', 'charges', 'relatedParties', 'fileAnalysis', 'authorizedCapitalWords', 'paidUpCapitalWords'].includes(key)) return;
+              if (['directors', 'charges', 'associateSubsidiaries', 'commonDirectorships', 'fileAnalysis', 'authorizedCapitalWords', 'paidUpCapitalWords'].includes(key)) return;
               
-              const newValue = parsedData[key];
+              let newValue = parsedData[key];
+              
+              // Validate and fix numbers if words are available
+              if (key === 'authorizedCapital' && parsedData.authorizedCapitalWords) {
+                newValue = validateAndFixAmount(newValue, parsedData.authorizedCapitalWords);
+              } else if (key === 'paidUpCapital' && parsedData.paidUpCapitalWords) {
+                newValue = validateAndFixAmount(newValue, parsedData.paidUpCapitalWords);
+              }
+
               const oldValue = (prev as any)[key];
 
               if (!oldValue && newValue) {
@@ -172,10 +285,15 @@ export default function App() {
 
           (parsedData.charges || []).forEach((c: any) => {
             const existing = chargeMap.get(c.id);
+            
+            // Validate and fix amountSecured if amountInWords is available
+            const validatedAmount = validateAndFixAmount(c.amountSecured || 0, c.amountInWords || '');
+            
             if (!existing) {
               chargeMap.set(c.id, {
                 ...c,
-                amountInWords: numberToWords(c.amountSecured || 0),
+                amountSecured: validatedAmount,
+                amountInWords: c.amountInWords || numberToWords(validatedAmount),
                 sourceFile: fileContents[0].name
               });
               newChargesCount++;
@@ -184,13 +302,18 @@ export default function App() {
               const merged = { ...existing };
               let updated = false;
               Object.keys(c).forEach(k => {
-                if (!(existing as any)[k] && (c as any)[k]) {
+                if (k === 'amountSecured') {
+                  if (validatedAmount !== existing.amountSecured) {
+                    merged.amountSecured = validatedAmount;
+                    updated = true;
+                  }
+                } else if (!(existing as any)[k] && (c as any)[k]) {
                   (merged as any)[k] = (c as any)[k];
                   updated = true;
                 }
               });
               if (updated) {
-                merged.amountInWords = numberToWords(merged.amountSecured || 0);
+                merged.amountInWords = merged.amountInWords || numberToWords(merged.amountSecured || 0);
                 merged.needsVerification = true;
                 merged.verificationMessage = `Updated from ${fileContents[0].name} — please verify`;
                 chargeMap.set(c.id, merged);
@@ -220,6 +343,19 @@ export default function App() {
             }
           });
           next.directors = Array.from(directorMap.values());
+
+          // 4. Merge Associate/Subsidiaries
+          const associateMap = new Map<string, AssociateSubsidiary>();
+          (prev.associateSubsidiaries || []).forEach(a => associateMap.set(a.cin || a.name, a));
+          (parsedData.associateSubsidiaries || []).forEach((a: any) => {
+            associateMap.set(a.cin || a.name, {
+              ...a,
+              id: Math.random().toString(36).substr(2, 9),
+              source: 'Auto-fetched'
+            });
+          });
+          next.associateSubsidiaries = Array.from(associateMap.values());
+
           next.fieldMetadata = fieldMetadata;
 
           // Log results
@@ -258,9 +394,13 @@ export default function App() {
     setIsModalOpen(false);
   };
 
+  const handlePrint = () => {
+    generatePDF(companyData, metadata);
+  };
+
   const handleExportWord = async () => {
     try {
-      await exportToWord(companyData, metadata);
+      await generateWord(companyData, metadata);
     } catch (err) {
       console.error('Word Export Error:', err);
       setError('Failed to export Word document.');
@@ -272,7 +412,7 @@ export default function App() {
       <TopBar 
         metadata={metadata} 
         onMetadataChange={setMetadata} 
-        onGenerate={() => window.print()} 
+        onGenerate={handlePrint} 
         onExportWord={handleExportWord}
       />
       

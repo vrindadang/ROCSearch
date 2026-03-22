@@ -41,7 +41,7 @@ export function Sidebar({ files = [], uploadLogs = [], onFileUpload, isAnalyzing
           onDrop={onDrop}
           className={cn(
             "flex flex-col items-center justify-center w-full h-32 border-2 border-dashed rounded-xl cursor-pointer transition-all",
-            "border-gray-300 bg-gray-50 hover:bg-gray-100 hover:border-navy/30",
+            "border-gray-300 bg-gray-50 hover:bg-gray-100 hover:border-[rgba(26,39,68,0.3)]",
             isAnalyzing && "opacity-50 pointer-events-none"
           )}
         >
@@ -55,7 +55,7 @@ export function Sidebar({ files = [], uploadLogs = [], onFileUpload, isAnalyzing
         
         <button 
           onClick={onAddManual}
-          className="mt-4 w-full flex items-center justify-center gap-2 py-2 px-4 bg-navy/5 text-navy rounded-lg hover:bg-navy/10 transition-colors text-sm font-medium"
+          className="mt-4 w-full flex items-center justify-center gap-2 py-2 px-4 bg-[rgba(26,39,68,0.05)] text-navy rounded-lg hover:bg-[rgba(26,39,68,0.1)] transition-colors text-sm font-medium"
         >
           <Plus className="w-4 h-4" />
           Add Manual Charge Entry

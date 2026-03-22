@@ -60,10 +60,10 @@ export function TopBar({ metadata, onMetadataChange, onGenerate, onExportWord }:
         <div className="flex items-center gap-2">
           <button 
             onClick={onGenerate}
-            className="flex items-center gap-2 px-4 py-2 bg-navy text-white rounded-lg hover:bg-navy/90 transition-colors text-sm font-medium shadow-sm"
+            className="flex items-center gap-2 px-4 py-2 bg-navy text-white rounded-lg hover:bg-[rgba(26,39,68,0.9)] transition-colors text-sm font-medium shadow-sm"
           >
-            <Printer className="w-4 h-4" />
-            Print Report
+            <Download className="w-4 h-4" />
+            Download PDF
           </button>
           <button 
             onClick={onExportWord}
