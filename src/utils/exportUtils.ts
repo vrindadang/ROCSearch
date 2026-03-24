@@ -167,14 +167,14 @@ export const generateWord = async (data: CompanyData, metadata: ReportMetadata) 
           width: { size: 100, type: WidthType.PERCENTAGE },
           rows: [
             new TableRow({
-              children: ["Sl.No", "Charge ID", "Charge Holder Name", "Amount (INR)", "Creation Date", "Mod. Date"].map(h => createTableCell(h, true))
+              children: ["Sl.No", "Charge ID", "Charge Holder Name", "Amount (In Rupees)", "Date of Creation", "Date of Last Modification"].map(h => createTableCell(h, true))
             }),
             ...data.charges.filter(c => c.status === 'Open' || (!c.satisfactionDate || c.satisfactionDate.trim() === '' || c.satisfactionDate.toLowerCase() === 'n/a')).map((c, i) => new TableRow({
               children: [
                 createTableCell((i + 1).toString(), false, false, i % 2 === 0 ? "FFFFFF" : lightGrey),
                 createTableCell(c.id, false, false, i % 2 === 0 ? "FFFFFF" : lightGrey),
                 createTableCell(c.bankName, false, false, i % 2 === 0 ? "FFFFFF" : lightGrey),
-                createTableCell(formatCurrency(c.amountSecured), false, true, i % 2 === 0 ? "FFFFFF" : lightGrey),
+                createTableCell(`Rs. ${formatCurrency(c.amountSecured)}`, false, true, i % 2 === 0 ? "FFFFFF" : lightGrey),
                 createTableCell(c.creationDate, false, false, i % 2 === 0 ? "FFFFFF" : lightGrey),
                 createTableCell(c.modificationDate || 'N/A', false, false, i % 2 === 0 ? "FFFFFF" : lightGrey)
               ]
@@ -197,12 +197,12 @@ export const generateWord = async (data: CompanyData, metadata: ReportMetadata) 
               new TableRow({ children: [createTableCell("Extent and Operation of the Charge", true, false, "F0F0F0", 40), createTableCell(c.extentOfCharge || "Not Available")] })
             ]
           }),
-          ...(c.modificationDate && c.modificationDate !== 'N/A' ? [
+          ...(c.modificationDate && c.modificationDate !== 'N/A' && c.modificationDate.toLowerCase() !== 'not available' && c.modificationDate.trim() !== '' ? [
             new Paragraph({ text: `${i + 1}.1M Charge Modification on ${c.modificationDate} vide charge ID number ${c.id}`, heading: HeadingLevel.HEADING_3, spacing: { before: 200, after: 100 } }),
             new Table({
               width: { size: 100, type: WidthType.PERCENTAGE },
               rows: [
-                new TableRow({ children: [createTableCell("Updated Amount/Terms", true, false, "F0F0F0", 40), createTableCell(`Rs. ${formatCurrency(c.amountSecured)}\nModified on: ${c.modificationDate}`)] })
+                new TableRow({ children: [createTableCell("Updated Amount/Terms", true, false, "F0F0F0", 40), createTableCell(`Rs. ${formatCurrency(c.modifiedAmountSecured || c.amountSecured)}\nModified on: ${c.modificationDate}`)] })
               ]
             })
           ] : [])
@@ -224,7 +224,7 @@ export const generateWord = async (data: CompanyData, metadata: ReportMetadata) 
                 createTableCell(a.nature, false, false, i % 2 === 0 ? "FFFFFF" : lightGrey),
                 createTableCell(a.sharesHeld, false, true, i % 2 === 0 ? "FFFFFF" : lightGrey)
               ]
-            })) : [new TableRow({ children: [createTableCell("No data found in MGT-7", false, false, "FFFFFF")] })])
+            })) : [new TableRow({ children: [createTableCell("No data found in MGT-7 — please verify manually", false, false, "FFFFFF")] })])
           ]
         }),
 
@@ -244,7 +244,7 @@ export const generateWord = async (data: CompanyData, metadata: ReportMetadata) 
                 createTableCell(cd.state, false, false, i % 2 === 0 ? "FFFFFF" : lightGrey),
                 createTableCell(cd.commonDirectorsCount.toString(), false, true, i % 2 === 0 ? "FFFFFF" : lightGrey)
               ]
-            })) : [new TableRow({ children: [createTableCell("No common directorships identified", false, false, "FFFFFF")] })])
+            })) : [new TableRow({ children: [createTableCell("No common directorships identified — please verify manually", false, false, "FFFFFF")] })])
           ]
         }),
 
@@ -360,21 +360,7 @@ export const generatePDF = (data: CompanyData, metadata: ReportMetadata) => {
   // Helper to clean up text and prevent extra information
   const cleanText = (text: string, fallback: string = '') => {
     if (!text || text.trim().toLowerCase() === 'n/a') return fallback;
-    
-    // If text is very long, it's likely a raw dump, try to extract the actual name
-    if (text.length > 200) {
-      // Look for "Company Name: " or "Company: " or "Name: "
-      const match = text.match(/(?:Company Name|Company|Name):\s*([^.]+)/i);
-      if (match && match[1]) {
-        return match[1].trim();
-      }
-      // If no match, just take the first line and truncate
-      const firstLine = text.split('\n')[0].trim();
-      return firstLine.substring(0, 100) + '...';
-    }
-    
-    const firstLine = text.split('\n')[0].trim();
-    return firstLine;
+    return text.trim();
   };
 
   const checkPageBreak = (heightNeeded: number) => {
@@ -467,9 +453,11 @@ export const generatePDF = (data: CompanyData, metadata: ReportMetadata) => {
   doc.text('8. Company Highlights', margin, currentY);
   currentY += 5;
 
+  const openCharges = data.charges.filter(c => c.status === 'Open' || (!c.satisfactionDate || c.satisfactionDate.trim() === '' || c.satisfactionDate.toLowerCase() === 'n/a'));
+
   const highlights = [
     ['CIN', data.cin, 'Authorized Capital', `Rs. ${formatCurrency(data.authorizedCapital)}`],
-    ['Age', `${calculateAge(data.incorporationDate)}`, 'Open Charges', `${data.charges.filter(c => !c.satisfactionDate).length}`],
+    ['Age', `${calculateAge(data.incorporationDate)}`, 'Open Charges', `${openCharges.length}`],
     ['Status', data.status, 'Paid Up Capital', `Rs. ${formatCurrency(data.paidUpCapital)}`],
     ['Class', data.companyClass, 'Last AGM Date', data.lastAgmDate],
     ['Category', data.companyCategory, 'Balance Sheet Date', data.lastBalanceSheetDate],
@@ -532,6 +520,10 @@ export const generatePDF = (data: CompanyData, metadata: ReportMetadata) => {
         return row;
       }),
       theme: 'grid',
+      styles: { 
+        cellPadding: 1.5,
+        overflow: 'linebreak'
+      },
       headStyles: { 
         fillColor: [245, 245, 245], 
         textColor: [0, 0, 0], 
@@ -578,10 +570,9 @@ export const generatePDF = (data: CompanyData, metadata: ReportMetadata) => {
   doc.text('10. List of Continuing Charges', margin, currentY);
   currentY += 5;
 
-  const openCharges = data.charges.filter(c => c.status === 'Open' || (!c.satisfactionDate || c.satisfactionDate.trim() === '' || c.satisfactionDate.toLowerCase() === 'n/a'));
   autoTable(doc, {
     startY: currentY,
-    head: [['Sl.No', 'Charge ID', 'Charge Holder Name', 'Amount (INR)', 'Creation Date', 'Mod. Date']],
+    head: [['Sl.No', 'Charge ID', 'Charge Holder Name', 'Amount (In Rupees)', 'Date of Creation', 'Date of Last Modification']],
     body: openCharges.map((c, i) => [i + 1, c.id, c.bankName, `Rs. ${formatCurrency(c.amountSecured)}`, c.creationDate, c.modificationDate || 'N/A']),
     theme: 'grid',
     headStyles: { fillColor: [26, 39, 68], textColor: [255, 255, 255], fontSize: 9 },
@@ -625,7 +616,7 @@ export const generatePDF = (data: CompanyData, metadata: ReportMetadata) => {
     });
     currentY += 10;
 
-    if (c.modificationDate && c.modificationDate !== 'N/A') {
+    if (c.modificationDate && c.modificationDate !== 'N/A' && c.modificationDate.toLowerCase() !== 'not available' && c.modificationDate.trim() !== '') {
       checkPageBreak(40);
       doc.setFontSize(9);
       doc.setFont('helvetica', 'bold');
@@ -635,7 +626,7 @@ export const generatePDF = (data: CompanyData, metadata: ReportMetadata) => {
       autoTable(doc, {
         startY: currentY,
         body: [
-          ['Updated Amount/Terms', `Rs. ${formatCurrency(c.amountSecured)}\nModified on: ${c.modificationDate}`]
+          ['Updated Amount/Terms', `Rs. ${formatCurrency(c.modifiedAmountSecured || c.amountSecured)}\nModified on: ${c.modificationDate}`]
         ],
         theme: 'grid',
         styles: { fontSize: 8, cellPadding: 2 },
@@ -663,7 +654,7 @@ export const generatePDF = (data: CompanyData, metadata: ReportMetadata) => {
   autoTable(doc, {
     startY: currentY,
     head: [['S.No', 'CIN/FCRN', 'Name of Company', 'Nature', '% Shares']],
-    body: data.associateSubsidiaries.length > 0 ? data.associateSubsidiaries.map((a, i) => [i + 1, a.cin, a.name, a.nature, a.sharesHeld]) : [['-', 'No data found in MGT-7', '-', '-', '-']],
+    body: data.associateSubsidiaries.length > 0 ? data.associateSubsidiaries.map((a, i) => [i + 1, a.cin, a.name, a.nature, a.sharesHeld]) : [['-', 'No data found in MGT-7 — please verify manually', '-', '-', '-']],
     theme: 'grid',
     headStyles: { fillColor: [26, 39, 68], textColor: [255, 255, 255], fontSize: 8 },
     bodyStyles: { fontSize: 7 },
@@ -679,8 +670,8 @@ export const generatePDF = (data: CompanyData, metadata: ReportMetadata) => {
   currentY += 5;
   autoTable(doc, {
     startY: currentY,
-    head: [['S.No', 'Company Name', 'Status', 'Age', 'State', 'Common Directors']],
-    body: data.commonDirectorships.length > 0 ? data.commonDirectorships.map((cd, i) => [i + 1, cd.name, cd.status, cd.age, cd.state, cd.commonDirectorsCount]) : [['-', 'No common directorships identified', '-', '-', '-', '-']],
+    head: [['S.No', 'Company Name', 'Status', 'Age', 'State', 'No. of Common Directors']],
+    body: data.commonDirectorships.length > 0 ? data.commonDirectorships.map((cd, i) => [i + 1, cd.name, cd.status, cd.age, cd.state, cd.commonDirectorsCount]) : [['-', 'No common directorships identified — please verify manually', '-', '-', '-', '-']],
     theme: 'grid',
     headStyles: { fillColor: [26, 39, 68], textColor: [255, 255, 255], fontSize: 8 },
     bodyStyles: { fontSize: 7 },

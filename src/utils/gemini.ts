@@ -387,19 +387,20 @@ export async function parseCompanyFiles(fileContents: { name: string, content: s
               CRITICAL INSTRUCTIONS FOR CHG FILES:
               1. You are a legal document analyst specializing in Indian company charge registrations under the Companies Act. I am providing you with CHG-1 forms for a company. I will provide you multiple CHG-1 documents for the same Charge ID.
               2. Your task: Generate two separate entries/tables for each Charge ID — one for the original creation and one for the modification.
-              3. STRICT RULE FOR AMOUNT SECURED:
-                 - In the Original Charge table, the Amount Secured must be taken exclusively from the CHG-1 form where field 3(a) = "Creation of charge". This value MUST be stored in the "amountSecured" and "amountInWords" fields. Do NOT use the amount from any modification form here.
-                 - In the Modification table, the Amount Secured must be taken exclusively from the CHG-1 form where field 3(a) = "Modification of charge". This value MUST be stored in the "modifiedAmountSecured" and "modifiedAmountInWords" fields.
-                 - These two amounts will often be different — that difference is intentional and must be preserved.
-                 - If the creation form shows ₹5,00,00,000 and the modification form shows ₹7,50,00,000, then:
-                   amountSecured → 50000000
-                   modifiedAmountSecured → 75000000
-                 - Never populate the original charge table with data from the modification form or vice versa. Treat each form as a completely independent source.
-              4. Label each table clearly as: "Charge Created on [DD/MM/YYYY] vide Charge ID [number]" and "Charge Modification on [DD/MM/YYYY] vide Charge ID [number]" respectively.
-              5. Identify if a CHG file is TYPE A (Real Data) or TYPE B (Blank XFA Template).
-              6. TYPE A files have filled CIN, Bank Name, Amounts, and Dates. Extract EVERYTHING from these.
-              7. TYPE B files are empty templates. Mark them as isBlankXfa: true in fileAnalysis.
-              8. WHEN NO MODIFICATION EXISTS: If there is no CHG-1 modification form for a charge, leave "modifiedAmountSecured" as 0 (or omit it), leave "modifiedAmountInWords" as empty string, and set "modificationDate" to empty string "". Do NOT set modificationDate to "Not Available" — leave it as an empty string so the UI knows there is no modification.
+              3. UNIQUE IDENTIFICATION (CRITICAL):
+                 - To prevent data merging and ensure both creation and modification amounts are preserved in all report formats:
+                 - The Original Creation entry MUST use the raw Charge ID (e.g., "100452823").
+                 - The Modification entry MUST append " (Modified)" to the Charge ID (e.g., "100452823 (Modified)").
+              4. STRICT RULE FOR AMOUNT SECURED:
+                 - In the Original Charge entry (raw ID): The "amountSecured" MUST be the creation amount from field 3(a)="Creation of charge".
+                 - In the Modification entry (ID with " (Modified)"): The "amountSecured" MUST be the modified amount from field 3(a)="Modification of charge".
+                 - This ensures that export tools which only read the primary "amountSecured" field will display the correct modified amount in the modification section.
+                 - Also populate "modifiedAmountSecured" and "modifiedAmountInWords" in the modification entry for redundancy.
+              5. Label each table clearly as: "Charge Created on [DD/MM/YYYY] vide Charge ID [number]" and "Charge Modification on [DD/MM/YYYY] vide Charge ID [number]" respectively.
+              6. Identify if a CHG file is TYPE A (Real Data) or TYPE B (Blank XFA Template).
+              7. TYPE A files have filled CIN, Bank Name, Amounts, and Dates. Extract EVERYTHING from these.
+              8. TYPE B files are empty templates. Mark them as isBlankXfa: true in fileAnalysis.
+              9. WHEN NO MODIFICATION EXISTS: If there is no CHG-1 modification form for a charge, leave "modifiedAmountSecured" as 0 (or omit it), leave "modifiedAmountInWords" as empty string, and set "modificationDate" to empty string "". Do NOT set modificationDate to "Not Available" — leave it as an empty string so the UI knows there is no modification.
               
               Documents:
               ${combinedText}`
