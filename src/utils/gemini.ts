@@ -2,11 +2,57 @@ import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
 
+// Global lock to prevent concurrent AI requests which trigger 429s
+let aiRequestLock: Promise<void> = Promise.resolve();
+
+/**
+ * Helper to retry an async function with exponential backoff.
+ * Specifically handles 429 (RESOURCE_EXHAUSTED) errors.
+ * Also ensures that AI requests are processed sequentially across the app.
+ */
+async function withRetry<T>(fn: () => Promise<T>, maxRetries = 5, initialDelay = 5000): Promise<T> {
+  // Wait for the previous request to finish (Sequential Queue)
+  const currentLock = aiRequestLock;
+  let resolveLock: () => void;
+  aiRequestLock = new Promise((resolve) => { resolveLock = resolve; });
+  
+  await currentLock;
+
+  try {
+    let lastError: any;
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        return await fn();
+      } catch (err: any) {
+        lastError = err;
+        const isQuotaError = 
+          err?.message?.includes("RESOURCE_EXHAUSTED") || 
+          err?.status === "RESOURCE_EXHAUSTED" ||
+          err?.code === 429 ||
+          JSON.stringify(err).includes("429") ||
+          JSON.stringify(err).includes("RESOURCE_EXHAUSTED");
+
+        if (isQuotaError && i < maxRetries - 1) {
+          const delay = initialDelay * Math.pow(2, i);
+          console.warn(`Gemini quota exhausted. Retrying in ${delay}ms (Attempt ${i + 1}/${maxRetries})...`);
+          await new Promise(resolve => setTimeout(resolve, delay));
+          continue;
+        }
+        throw err;
+      }
+    }
+    throw lastError;
+  } finally {
+    // Add a small cooldown after each request to let the quota recover
+    setTimeout(() => resolveLock(), 1000);
+  }
+}
+
 /**
  * Attempts to repair truncated JSON by closing unclosed strings, arrays, and objects.
  */
 function repairTruncatedJson(json: string): string {
-  if (!json || json.trim() === "") return "{}";
+  if (!json || json.trim() === "") return "[]";
   
   let result = json.trim();
   
@@ -24,12 +70,15 @@ function repairTruncatedJson(json: string): string {
     if (start !== -1) {
       result = result.substring(start);
     } else {
-      return "{}";
+      return "[]";
     }
   }
 
-  // First pass: fix unescaped backslashes and bad escapes
-  // This helps prevent "Bad escaped character" errors
+  // Pre-cleaning: remove control characters that break JSON
+  // eslint-disable-next-line no-control-regex
+  result = result.replace(/[\u0000-\u001F\u007F-\u009F]/g, "");
+
+  // Fix unescaped backslashes and bad escapes
   result = result.replace(/\\(?!(["\\\/bfnrt]|u[0-9a-fA-F]{4}))/g, "\\\\");
 
   const getStack = (text: string) => {
@@ -65,6 +114,7 @@ function repairTruncatedJson(json: string): string {
   const closeJson = (text: string) => {
     let { stack, inString, escaped } = getStack(text);
     let closed = text;
+    
     if (inString) {
       if (escaped) closed = closed.slice(0, -1);
       // Handle trailing backslashes
@@ -97,6 +147,8 @@ function repairTruncatedJson(json: string): string {
     JSON.parse(current);
     return current;
   } catch (e) {
+    console.warn("Initial JSON parse failed, attempting to clean and repair text...", e);
+    
     // Iterative backtracking
     let lastComma = result.lastIndexOf(',');
     while (lastComma !== -1 && result.length > 10) {
@@ -118,25 +170,49 @@ function cleanAndExtractJson(text: string): string {
   if (!text) return "";
   let cleaned = text.trim();
   
-  // Remove markdown code blocks if present
-  // Handle both complete and truncated code blocks
+  // Check if it's a markdown table instead of JSON
+  if (cleaned.includes('|') && cleaned.includes('---')) {
+    try {
+      const lines = cleaned.split('\n').filter(l => l.trim().startsWith('|'));
+      if (lines.length >= 3) {
+        const headers = lines[0].split('|').map(h => h.trim()).filter(h => h !== "");
+        const rows = lines.slice(2).map(line => {
+          const cells = line.split('|').map(c => c.trim()).filter((c, i) => i > 0 && i <= headers.length);
+          const obj: any = {};
+          headers.forEach((h, i) => {
+            const key = h.toLowerCase().replace(/[^a-z0-9]/g, '_');
+            obj[key] = cells[i] || "";
+          });
+          return obj;
+        });
+        return JSON.stringify(rows);
+      }
+    } catch (e) {
+      console.error("Failed to parse markdown table:", e);
+    }
+  }
+
+  // Handle markdown code blocks
   if (cleaned.includes('```json')) {
-    cleaned = cleaned.split('```json')[1] || cleaned;
+    const parts = cleaned.split('```json');
+    cleaned = parts[1] || parts[0];
   } else if (cleaned.includes('```')) {
-    cleaned = cleaned.split('```')[1] || cleaned;
+    const parts = cleaned.split('```');
+    cleaned = parts[1] || parts[0];
   }
   
-  // Remove any trailing backticks and everything after them
+  // Remove trailing backticks if they exist
   if (cleaned.includes('```')) {
     cleaned = cleaned.split('```')[0];
   }
   
   cleaned = cleaned.trim();
   
-  // Find the first actual JSON character
+  // Find the first actual JSON character ({ or [)
   const firstBrace = cleaned.indexOf('{');
   const firstBracket = cleaned.indexOf('[');
   let start = -1;
+  
   if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
     start = firstBrace;
   } else if (firstBracket !== -1) {
@@ -207,7 +283,9 @@ const companySchema = {
           bankName: { type: Type.STRING },
           bankAddress: { type: Type.STRING },
           amountSecured: { type: Type.NUMBER },
+          modifiedAmountSecured: { type: Type.NUMBER },
           amountInWords: { type: Type.STRING },
+          modifiedAmountInWords: { type: Type.STRING },
           propertyCharged: { type: Type.STRING },
           termsAndConditions: { type: Type.STRING },
           margin: { type: Type.STRING },
@@ -269,7 +347,7 @@ export async function parseCompanyFiles(fileContents: { name: string, content: s
   const combinedText = fileContents.map(f => `FILE: ${f.name}\n${f.content}`).join("\n\n--- NEW FILE ---\n\n");
   
   try {
-    const response = await ai.models.generateContent({
+    const response = await withRetry(() => ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: [
         {
@@ -292,21 +370,36 @@ export async function parseCompanyFiles(fileContents: { name: string, content: s
                  - Identify "Common Directorships" by matching DINs/Names from the "Directors Info" section with any "Potential Related Parties" or "Common Directorship" tables found in the documents.
               
               3. CHARGE MASTER DATA:
-                 - For the "List of Continuing Charges," ONLY include charges explicitly listed as "Open" or "Continuing."
+                 - For the "List of Continuing Charges" or "Index of Charges" section, ALL charges listed there are considered "Open" or "Continuing" unless explicitly marked as "Satisfied" or "Closed".
+                 - You MUST set the status to "Open" for all such continuing charges.
                  - If a Charge ID appears in a summary table but has no details in the "Particulars" section, set its details to "Not Available" (do not invent data).
-                 - For "Modified" charges, use the LATEST "Amount Secured" from the modification entry, not the original creation entry.
+                 - IMPORTANT: The "List of Continuing Charges" summary table may show the CURRENT (post-modification) amount, not the original creation amount. If CHG-1 forms are also provided for a charge, ALWAYS use the amount from the CHG-1 Creation form for "amountSecured" and "amountInWords", NOT the summary table amount. The summary table amount should only be used as a fallback when no CHG-1 Creation form exists for that charge.
+                 - If the "Amount in Words" contradicts the numeric "Amount Secured", trust the Amount in Words as ground truth and correct the number accordingly.
               
               4. FORMATTING:
                  - Output all currency in standard Indian format (e.g., ₹ XX,XX,XXX) in your thinking/internal notes, but for the JSON fields, provide raw numbers for numeric fields and formatted strings for word fields.
                  - If data is missing in the source, write "Not Available" instead of leaving it blank or guessing.
               
               5. VALIDATION:
-                 - Ensure the "Total Number of Open Charges" in the Highlights section exactly matches the number of rows in your "charges" array where status is "Open".
+                 - The "Open Charges" count in the Highlights section MUST exactly match the number of charges in your "charges" array that have status "Open".
+                 - If you find 7 charges in the "List of Continuing Charges", the "charges" array must have 7 items with status "Open", and any summary count must reflect this.
               
               CRITICAL INSTRUCTIONS FOR CHG FILES:
-              1. Identify if a CHG file is TYPE A (Real Data) or TYPE B (Blank XFA Template).
-              2. TYPE A files have filled CIN, Bank Name, Amounts, and Dates. Extract EVERYTHING from these.
-              3. TYPE B files are empty templates. Mark them as isBlankXfa: true in fileAnalysis.
+              1. You are a legal document analyst specializing in Indian company charge registrations under the Companies Act. I am providing you with CHG-1 forms for a company. I will provide you multiple CHG-1 documents for the same Charge ID.
+              2. Your task: Generate two separate entries/tables for each Charge ID — one for the original creation and one for the modification.
+              3. STRICT RULE FOR AMOUNT SECURED:
+                 - In the Original Charge table, the Amount Secured must be taken exclusively from the CHG-1 form where field 3(a) = "Creation of charge". This value MUST be stored in the "amountSecured" and "amountInWords" fields. Do NOT use the amount from any modification form here.
+                 - In the Modification table, the Amount Secured must be taken exclusively from the CHG-1 form where field 3(a) = "Modification of charge". This value MUST be stored in the "modifiedAmountSecured" and "modifiedAmountInWords" fields.
+                 - These two amounts will often be different — that difference is intentional and must be preserved.
+                 - If the creation form shows ₹5,00,00,000 and the modification form shows ₹7,50,00,000, then:
+                   amountSecured → 50000000
+                   modifiedAmountSecured → 75000000
+                 - Never populate the original charge table with data from the modification form or vice versa. Treat each form as a completely independent source.
+              4. Label each table clearly as: "Charge Created on [DD/MM/YYYY] vide Charge ID [number]" and "Charge Modification on [DD/MM/YYYY] vide Charge ID [number]" respectively.
+              5. Identify if a CHG file is TYPE A (Real Data) or TYPE B (Blank XFA Template).
+              6. TYPE A files have filled CIN, Bank Name, Amounts, and Dates. Extract EVERYTHING from these.
+              7. TYPE B files are empty templates. Mark them as isBlankXfa: true in fileAnalysis.
+              8. WHEN NO MODIFICATION EXISTS: If there is no CHG-1 modification form for a charge, leave "modifiedAmountSecured" as 0 (or omit it), leave "modifiedAmountInWords" as empty string, and set "modificationDate" to empty string "". Do NOT set modificationDate to "Not Available" — leave it as an empty string so the UI knows there is no modification.
               
               Documents:
               ${combinedText}`
@@ -321,7 +414,7 @@ export async function parseCompanyFiles(fileContents: { name: string, content: s
         maxOutputTokens: 16384,
         thinkingConfig: { thinkingLevel: ThinkingLevel.LOW }
       }
-    });
+    }));
 
     let text = response.text || "";
     text = cleanAndExtractJson(text);
@@ -357,47 +450,45 @@ export async function parseCompanyFiles(fileContents: { name: string, content: s
 
 export async function fetchOtherDirectorships(name: string, din: string): Promise<any> {
   try {
-    const response = await ai.models.generateContent({
+    const response = await withRetry(() => ai.models.generateContent({
       model: "gemini-3-flash-preview",
       contents: [
         {
           role: "user",
           parts: [
             {
-              text: `Find other current and past directorships for ${name} (DIN ${din}).
-              
-              Search MCA India records via ZaubaCorp, Tofler, etc.
-              
-              SOURCES TO TRY:
-              1. Zaubacorp: https://www.zaubacorp.com/director/${name.replace(/\s+/g, '-')}/${din}
-              2. Tofler: https://www.tofler.in/director/${din}
-              3. Google Search: "DIN ${din} ${name} directorships"
-              
-              Extract up to 20 most recent and relevant directorships.
-              
-              Extract:
-              - Company Name
-              - Company CIN (if available)
-              - Status (Active/Strike Off/Amalgamated/Dissolved)
-              - Appointment Date (DD/MM/YYYY)
-              - Cessation Date (if no longer a director)
-              - Industry/NIC
-              - State/City
-              
-              Return ONLY a JSON object:
-              {
-                "otherCompanies": [
-                  {
-                    "name": "string",
-                    "cin": "string",
-                    "status": "string",
-                    "appointmentDate": "string",
-                    "cessationDate": "string",
-                    "industry": "string",
-                    "state": "string"
-                  }
-                ]
-              }`
+              text: `Role: You are an expert Corporate Data Analyst specializing in Indian MCA (Ministry of Corporate Affairs) records.
+
+Primary Data Source: Use ONLY the Google Search tool to find information from https://mycorporateinfo.com/. Do not use general knowledge or other websites if this one is available.
+
+Objective: Generate a complete Directorship Report for: ${name} / ${din}.
+
+Extraction Rules (Mandatory):
+
+Full Enumeration: You must find and list EVERY company associated with this person. For example, if the person has 11 directorships, you must list all 11. Do not summarize or say "and others."
+
+Table Format: Present the data in a clean, Markdown table with the following exact columns:
+
+S.No.
+
+Company Name (Full official name)
+
+Status (Active, Strike Off, Amalgamated, etc.)
+
+Appointment Date (Format: DD/MM/YYYY)
+
+Industry (Category of business) - MANDATORY: If not explicitly found, infer from company name. DO NOT LEAVE BLANK.
+
+State (Location of registered office) - MANDATORY: Search for the city/state of the registered office. DO NOT LEAVE BLANK.
+
+Accuracy Check: If the search results show "Past Directorships" or "Other Directorships," include those as well but note their status correctly.
+
+No Conversational Filler: Start immediately with the table. Do not say "I have searched..." or "Here are the results..."
+
+Format Example (Strictly follow this layout):
+| S.No. | Company Name | Status | Appointment Date | Industry | State |
+|---|---|---|---|---|---|
+| 1 | EXAMPLE PVT LTD | Active | 01/01/2020 | Manufacturing | Maharashtra |`
             }
           ]
         }
@@ -405,61 +496,163 @@ export async function fetchOtherDirectorships(name: string, din: string): Promis
       config: {
         tools: [{ googleSearch: {} }],
         responseMimeType: "application/json",
-        maxOutputTokens: 16384,
-        thinkingConfig: { thinkingLevel: ThinkingLevel.LOW },
+        maxOutputTokens: 8192,
+        thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH },
         responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            otherCompanies: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  name: { type: Type.STRING },
-                  cin: { type: Type.STRING },
-                  status: { type: Type.STRING },
-                  appointmentDate: { type: Type.STRING },
-                  cessationDate: { type: Type.STRING },
-                  industry: { type: Type.STRING },
-                  state: { type: Type.STRING }
-                }
-              }
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              s_no: { type: Type.NUMBER },
+              company_name: { type: Type.STRING },
+              status: { type: Type.STRING },
+              appointment_date: { type: Type.STRING },
+              industry: { type: Type.STRING },
+              state: { type: Type.STRING }
             }
           }
         }
       }
-    });
+    }));
 
     let text = response.text || "";
     text = cleanAndExtractJson(text);
+    text = repairTruncatedJson(text);
     
-    if (!text || text === "") return { otherCompanies: [] };
+    if (!text || text === "" || text === "[]" || text === "{}") return { otherCompanies: [] };
 
     try {
-      return JSON.parse(text);
-    } catch (parseError) {
-      console.error("Directorships JSON parse failed, attempting to clean and repair text...", parseError);
-      
-      // Attempt to fix common JSON issues from LLMs
-      // Remove ALL control characters including literal newlines which are invalid in JSON strings
-      let cleanedText = text.replace(/[\u0000-\u001f]+/g, " "); 
-
-      try {
-        return JSON.parse(cleanedText);
-      } catch (secondError) {
-        console.error("Second directorships JSON parse attempt failed, attempting emergency repair...", secondError);
-        try {
-          const repairedText = repairTruncatedJson(cleanedText);
-          return JSON.parse(repairedText);
-        } catch (finalError) {
-          console.error("Final directorships JSON parse attempt failed.", finalError);
-          // If everything fails, return what we have or empty
-          return { otherCompanies: [] };
-        }
+      const data = JSON.parse(text);
+      if (Array.isArray(data)) {
+        return {
+          otherCompanies: data.map(item => ({
+            name: item.company_name || item.companyname || "",
+            status: item.status || "",
+            appointmentDate: item.appointment_date || item.appointmentdate || "",
+            industry: item.industry || "",
+            state: item.state || "",
+            hasFullDetails: true
+          }))
+        };
       }
+      return { otherCompanies: [] };
+    } catch (parseError) {
+      console.error("Directorships JSON parse failed, attempting emergency repair...", parseError);
+      
+      // Try to manually extract if JSON is slightly malformed or truncated
+      const companies: any[] = [];
+      
+      // Look for objects like {"company_name": "...", ...}
+      const objectRegex = /\{\s*"company_name":\s*"([^"]+)"(?:,\s*"status":\s*"([^"]*)")?(?:,\s*"appointment_date":\s*"([^"]*)")?(?:,\s*"industry":\s*"([^"]*)")?(?:,\s*"state":\s*"([^"]*)")?\s*\}/g;
+      let match;
+      while ((match = objectRegex.exec(text)) !== null) {
+        companies.push({ 
+          name: match[1], 
+          status: match[2] || "",
+          appointmentDate: match[3] || "",
+          industry: match[4] || "",
+          state: match[5] || "",
+          hasFullDetails: true
+        });
+      }
+      
+      return { otherCompanies: companies };
     }
   } catch (err) {
     console.error("Error fetching directorships:", err);
     return { otherCompanies: [] };
+  }
+}
+
+export async function fetchCompanyDetails(companyName: string, cin: string, directorName: string): Promise<any> {
+  try {
+    const response = await withRetry(() => ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: [
+        {
+          role: "user",
+          parts: [
+            {
+              text: `Fetch verified details for the company "${companyName}" (CIN: ${cin}) regarding director "${directorName}".
+
+SEARCH STRATEGY (follow ALL steps in order):
+1. Search: "${companyName} Zaubacorp" — extract registered office address and business activity
+2. Search: "${companyName} Tofler company profile" — extract company description and state
+3. Search: "${companyName} ${cin} MCA master data" — cross-verify status and NIC description
+4. If CIN is missing or empty, search: "${companyName} India company CIN registered office"
+
+FIELD-SPECIFIC RULES:
+
+industry (THIS IS A BRIEF PROFILE):
+- This field represents a BRIEF PROFILE of the company — describe what the company actually does in business terms.
+- GOOD examples: 
+  "Manufacture of pharmaceuticals, medicinal chemicals and botanical products"
+  "Real estate activities with own or leased property"
+  "Architectural and engineering activities and related technical consultancy"
+  "Wholesale of textiles and garment accessories"
+- BAD examples: "Other business activities", "Services", "NIC 99", "N/A", "Not Available"
+- If exact NIC description is not found on Zaubacorp/Tofler, INFER a specific business description from the company name:
+  "Rosswood Land and Properties" → "Real estate activities on a fee or contract basis"
+  "ABC Micro Finance" → "Other financial intermediation n.e.c."
+  "Oakley Bowden Pharma" → "Manufacture of pharmaceuticals, medicinal chemicals and botanical products"
+- NEVER leave this blank or generic. Always provide a meaningful business description.
+
+state:
+- Must be the FULL INDIAN STATE NAME of the registered office.
+- Extract from the registered office address found on Zaubacorp/Tofler/MCA.
+- Return STATE name, NOT city: Chennai → "Tamil Nadu", Mumbai → "Maharashtra", Gurugram → "Haryana", Bengaluru → "Karnataka", Kolkata → "West Bengal", Delhi → "Delhi"
+- If the company is an LLP, check LLP registration address instead.
+- NEVER leave blank.
+
+Also extract:
+- status: Current company status (Active, Strike Off, Amalgamated, Dissolved, Under Liquidation)
+- appointmentDate: Date ${directorName} was appointed as director (DD/MM/YYYY)
+- cessationDate: Date ${directorName} ceased as director (DD/MM/YYYY), blank if still active
+
+Return ONLY a JSON object with: status, appointmentDate, cessationDate, industry, state`
+            }
+          ]
+        }
+      ],
+      config: {
+        tools: [{ googleSearch: {} }],
+        responseMimeType: "application/json",
+        maxOutputTokens: 2048,
+        thinkingConfig: { thinkingLevel: ThinkingLevel.HIGH },
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            status: { type: Type.STRING },
+            appointmentDate: { type: Type.STRING },
+            cessationDate: { type: Type.STRING },
+            industry: { type: Type.STRING, description: "Brief profile: specific description of company's business activity, not generic" },
+            state: { type: Type.STRING, description: "Full Indian state name of registered office (e.g. Tamil Nadu, Maharashtra, Delhi, not city names)" }
+          }
+        }
+      }
+    }));
+
+    let text = response.text || "";
+    text = cleanAndExtractJson(text);
+    text = repairTruncatedJson(text);
+    
+    if (!text || text === "" || text === "{}") return {};
+
+    try {
+      const data = JSON.parse(text);
+      // Clean up "N/A" values if Gemini ignored instructions
+      Object.keys(data).forEach(key => {
+        if (typeof data[key] === 'string' && (data[key].toLowerCase() === "n/a" || data[key].toLowerCase() === "not available")) {
+          data[key] = "";
+        }
+      });
+      return data;
+    } catch (parseError) {
+      console.error("Company details JSON parse failed:", parseError);
+      return {};
+    }
+  } catch (err) {
+    console.error(`Error fetching details for ${companyName}:`, err);
+    return {};
   }
 }

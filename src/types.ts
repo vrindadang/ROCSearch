@@ -8,6 +8,7 @@ export interface Director {
   disqualified: boolean;
   dinDeactivated: boolean;
   isFetchingDirectorships?: boolean;
+  fetchProgress?: string;
   fetchError?: string;
 }
 
@@ -31,7 +32,9 @@ export interface Charge {
   bankAddress: string;
   bankEmail?: string;
   amountSecured: number;
+  modifiedAmountSecured?: number;
   amountInWords: string;
+  modifiedAmountInWords?: string;
   propertyCharged: string;
   termsAndConditions: string;
   margin: string;

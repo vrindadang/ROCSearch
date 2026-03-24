@@ -381,152 +381,169 @@ export function ReportView({ data, metadata, onDataChange }: ReportViewProps) {
         <section>
           <h3 className="text-sm font-bold mb-4">9. Directors Info and Other Directorships</h3>
           <div className="space-y-8">
-            {directors.map((d, idx) => (
-              <div key={d.din || `dir-block-${idx}`}>
-                <div className="flex items-center justify-between mb-2 border-b border-[rgba(26,39,68,0.2)] pb-1">
-                  <h4 className="text-xs font-bold text-navy uppercase">{d.name} ({d.din})</h4>
-                  {d.isFetchingDirectorships && (
-                    <div className="flex items-center gap-2 text-[10px] text-navy animate-pulse">
-                      <Loader2 className="w-3 h-3 animate-spin" />
-                      <span>🔍 Searching MCA records for {d.name}...</span>
-                    </div>
+            {directors.map((d, idx) => {
+              const hasCessationDate = (d.otherCompanies || []).some(c => c.cessationDate && c.cessationDate.trim() !== "");
+              
+              return (
+                <div key={d.din || `dir-block-${idx}`}>
+                  <div className="flex items-center justify-between mb-2 border-b border-[rgba(26,39,68,0.2)] pb-1">
+                    <h4 className="text-xs font-bold text-navy uppercase">
+                      {idx + 1}. {d.name} — (DIN: {d.din})
+                    </h4>
+                    {d.isFetchingDirectorships && (
+                      <div className="flex items-center gap-2 text-[10px] text-navy animate-pulse">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        <span>{d.fetchProgress || `🔍 Searching MCA records for ${d.name}...`}</span>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="relative overflow-x-auto">
+                    <table className="w-full border-collapse border border-gray-300 text-[10px]">
+                      <thead>
+                        <tr className="bg-[#f1f3f5] text-black">
+                          <th className="border border-gray-300 p-2 text-center w-10 font-bold uppercase text-[8px]">SNO</th>
+                          <th className="border border-gray-300 p-2 text-left font-bold uppercase text-[8px]">Current Company</th>
+                          <th className="border border-gray-300 p-2 text-center w-24 font-bold uppercase text-[8px]">Status</th>
+                          <th className="border border-gray-300 p-2 text-center w-28 font-bold uppercase text-[8px]">Appointment Date</th>
+                          {hasCessationDate && (
+                            <th className="border border-gray-300 p-2 text-center w-28 font-bold uppercase text-[8px]">Cessation Date</th>
+                          )}
+                          <th className="border border-gray-300 p-2 text-left font-bold uppercase text-[8px]">Industry</th>
+                          <th className="border border-gray-300 p-2 text-center w-24 font-bold uppercase text-[8px]">State</th>
+                          {onDataChange && <th className="border border-gray-300 p-2 text-center w-8 print:hidden"></th>}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(d.otherCompanies || []).map((c, cIdx) => (
+                          <tr key={c.id || `other-${cIdx}`} className="group hover:bg-gray-50 transition-colors">
+                            <td className="border border-gray-300 p-2 text-center text-gray-600">
+                              {cIdx + 1}
+                            </td>
+                            <td className="border border-gray-300 p-2 font-medium">
+                              {onDataChange ? (
+                                <textarea 
+                                  className="w-full bg-transparent outline-none focus:bg-white resize-none"
+                                  rows={1}
+                                  value={c.name || ''}
+                                  onChange={e => updateOtherCompany(d.din, c.id, { name: e.target.value })}
+                                  onInput={(e) => {
+                                    const target = e.target as HTMLTextAreaElement;
+                                    target.style.height = 'auto';
+                                    target.style.height = target.scrollHeight + 'px';
+                                  }}
+                                />
+                              ) : c.name || ''}
+                            </td>
+                            <td className="border border-gray-300 p-2 text-center">
+                              {onDataChange ? (
+                                <input 
+                                  className="w-full bg-transparent outline-none focus:bg-white text-center"
+                                  value={c.status || ''}
+                                  onChange={e => updateOtherCompany(d.din, c.id, { status: e.target.value })}
+                                />
+                              ) : c.status || ''}
+                            </td>
+                            <td className="border border-gray-300 p-2 text-center">
+                              {onDataChange ? (
+                                <input 
+                                  className="w-full bg-transparent outline-none focus:bg-white text-center"
+                                  value={c.appointmentDate || ''}
+                                  onChange={e => updateOtherCompany(d.din, c.id, { appointmentDate: e.target.value })}
+                                />
+                              ) : c.appointmentDate || ''}
+                            </td>
+                            {hasCessationDate && (
+                              <td className="border border-gray-300 p-2 text-center">
+                                {onDataChange ? (
+                                  <input 
+                                    className="w-full bg-transparent outline-none focus:bg-white text-center"
+                                    value={c.cessationDate || ''}
+                                    onChange={e => updateOtherCompany(d.din, c.id, { cessationDate: e.target.value })}
+                                  />
+                                ) : c.cessationDate || ''}
+                              </td>
+                            )}
+                            <td className="border border-gray-300 p-2">
+                              {onDataChange ? (
+                                <textarea 
+                                  className="w-full bg-transparent outline-none focus:bg-white resize-none"
+                                  rows={1}
+                                  value={c.industry || ''}
+                                  onChange={e => updateOtherCompany(d.din, c.id, { industry: e.target.value })}
+                                  onInput={(e) => {
+                                    const target = e.target as HTMLTextAreaElement;
+                                    target.style.height = 'auto';
+                                    target.style.height = target.scrollHeight + 'px';
+                                  }}
+                                />
+                              ) : c.industry || ''}
+                            </td>
+                            <td className="border border-gray-300 p-2 text-center">
+                              {onDataChange ? (
+                                <input 
+                                  className="w-full bg-transparent outline-none focus:bg-white text-center"
+                                  value={c.state || ''}
+                                  onChange={e => updateOtherCompany(d.din, c.id, { state: e.target.value })}
+                                />
+                              ) : c.state || ''}
+                            </td>
+                            {onDataChange && (
+                              <td className="border border-gray-300 p-2 text-center print:hidden">
+                                <button 
+                                  onClick={() => deleteOtherCompany(d.din, c.id)}
+                                  className="text-red-400 hover:text-red-600 transition-colors"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </td>
+                            )}
+                          </tr>
+                        ))}
+                        {(d.otherCompanies || []).length === 0 && !d.isFetchingDirectorships && (
+                          <tr key="no-other-directorships">
+                            <td colSpan={onDataChange ? (hasCessationDate ? 9 : 8) : (hasCessationDate ? 8 : 7)} className="border border-gray-200 p-4 text-center">
+                              <div className="flex flex-col items-center gap-1">
+                                <span className="text-yellow-700 font-bold bg-yellow-50 px-3 py-1 rounded-full border border-yellow-200 print:hidden">
+                                  ⚠️ No additional directorships found in public records for DIN {d.din}. Please add manually if required.
+                                </span>
+                                {d.fetchError && <span className="text-[9px] text-red-500 italic print:hidden">{d.fetchError}</span>}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                        {d.isFetchingDirectorships && (d.otherCompanies || []).length === 0 && (
+                          <tr key="fetching-directorships">
+                            <td colSpan={onDataChange ? (hasCessationDate ? 9 : 8) : (hasCessationDate ? 8 : 7)} className="border border-gray-200 p-8 text-center">
+                              <div className="flex flex-col items-center gap-2 text-navy">
+                                <Loader2 className="w-6 h-6 animate-spin" />
+                                <p className="text-xs font-medium">{d.fetchProgress || "Searching MCA records..."}</p>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {!d.isFetchingDirectorships && d.otherCompanies && d.otherCompanies.length > 0 && (
+                    <p className="mt-1 text-[8px] text-gray-500 italic">
+                      Data fetched from public MCA records — verify before finalising
+                    </p>
+                  )}
+                  
+                  {onDataChange && (
+                    <button 
+                      onClick={() => addOtherCompany(d.din)}
+                      className="mt-2 flex items-center gap-1.5 text-[9px] font-bold text-navy hover:text-[rgba(26,39,68,0.7)] transition-colors uppercase tracking-wider print:hidden"
+                    >
+                      <Plus className="w-3 h-3" />
+                      ADD ROW
+                    </button>
                   )}
                 </div>
-                
-                <div className="relative overflow-x-auto">
-                  <table className="w-full border-collapse text-[10px]">
-                    <thead>
-                      <tr className="bg-gray-100">
-                        <th className="border border-gray-200 p-1.5 text-left">Company Name</th>
-                        <th className="border border-gray-200 p-1.5 text-left">Status</th>
-                        <th className="border border-gray-200 p-1.5 text-left">Appt. Date</th>
-                        <th className="border border-gray-200 p-1.5 text-left">Cessation Date</th>
-                        <th className="border border-gray-200 p-1.5 text-left">Industry</th>
-                        <th className="border border-gray-200 p-1.5 text-left">State</th>
-                        <th className="border border-gray-200 p-1.5 text-left print:hidden">Source</th>
-                        {onDataChange && <th className="border border-gray-200 p-1.5 text-center w-8 print:hidden"></th>}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(d.otherCompanies || []).map((c, cIdx) => (
-                        <tr key={c.id || `other-${cIdx}`} className="group hover:bg-gray-50 transition-colors">
-                          <td className="border border-gray-200 p-1.5 font-medium">
-                            {onDataChange ? (
-                              <input 
-                                className="w-full bg-transparent outline-none focus:bg-white"
-                                value={c.name}
-                                onChange={e => updateOtherCompany(d.din, c.id, { name: e.target.value })}
-                              />
-                            ) : c.name}
-                          </td>
-                          <td className="border border-gray-200 p-1.5">
-                            {onDataChange ? (
-                              <input 
-                                className="w-full bg-transparent outline-none focus:bg-white"
-                                value={c.status}
-                                onChange={e => updateOtherCompany(d.din, c.id, { status: e.target.value })}
-                              />
-                            ) : c.status}
-                          </td>
-                          <td className="border border-gray-200 p-1.5">
-                            {onDataChange ? (
-                              <input 
-                                className="w-full bg-transparent outline-none focus:bg-white"
-                                value={c.appointmentDate}
-                                onChange={e => updateOtherCompany(d.din, c.id, { appointmentDate: e.target.value })}
-                              />
-                            ) : c.appointmentDate}
-                          </td>
-                          <td className="border border-gray-200 p-1.5">
-                            {onDataChange ? (
-                              <input 
-                                className="w-full bg-transparent outline-none focus:bg-white"
-                                value={c.cessationDate || ''}
-                                onChange={e => updateOtherCompany(d.din, c.id, { cessationDate: e.target.value })}
-                              />
-                            ) : c.cessationDate || '-'}
-                          </td>
-                          <td className="border border-gray-200 p-1.5">
-                            {onDataChange ? (
-                              <input 
-                                className="w-full bg-transparent outline-none focus:bg-white"
-                                value={c.industry}
-                                onChange={e => updateOtherCompany(d.din, c.id, { industry: e.target.value })}
-                              />
-                            ) : c.industry}
-                          </td>
-                          <td className="border border-gray-200 p-1.5">
-                            {onDataChange ? (
-                              <input 
-                                className="w-full bg-transparent outline-none focus:bg-white"
-                                value={c.state}
-                                onChange={e => updateOtherCompany(d.din, c.id, { state: e.target.value })}
-                              />
-                            ) : c.state}
-                          </td>
-                          <td className="border border-gray-200 p-1.5 print:hidden">
-                            <span className={cn(
-                              "px-1.5 py-0.5 rounded-full text-[8px] font-bold uppercase",
-                              c.source === 'Auto-fetched' ? "bg-emerald-100 text-emerald-700" : "bg-blue-100 text-blue-700"
-                            )}>
-                              {c.source}
-                            </span>
-                          </td>
-                          {onDataChange && (
-                            <td className="border border-gray-200 p-1.5 text-center print:hidden">
-                              <button 
-                                onClick={() => deleteOtherCompany(d.din, c.id)}
-                                className="text-red-400 hover:text-red-600 transition-colors"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </button>
-                            </td>
-                          )}
-                        </tr>
-                      ))}
-                      {(d.otherCompanies || []).length <= 1 && !d.isFetchingDirectorships && (
-                        <tr key="no-other-directorships">
-                          <td colSpan={onDataChange ? 8 : 7} className="border border-gray-200 p-4 text-center">
-                            <div className="flex flex-col items-center gap-1">
-                              <span className="text-yellow-700 font-bold bg-yellow-50 px-3 py-1 rounded-full border border-yellow-200 print:hidden">
-                                ⚠️ No additional directorships found in public records for DIN {d.din}. Please add manually if required.
-                              </span>
-                              {d.fetchError && <span className="text-[9px] text-red-500 italic print:hidden">{d.fetchError}</span>}
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                      {d.isFetchingDirectorships && (
-                        <tr key="fetching-directorships">
-                          <td colSpan={onDataChange ? 8 : 7} className="border border-gray-200 p-8 text-center">
-                            <div className="flex flex-col items-center gap-2 text-navy">
-                              <Loader2 className="w-6 h-6 animate-spin" />
-                              <p className="text-xs font-medium">Searching MCA records...</p>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                {!d.isFetchingDirectorships && d.otherCompanies && d.otherCompanies.length > 1 && (
-                  <p className="mt-1 text-[8px] text-gray-500 italic print:hidden">
-                    Data fetched from public MCA records — verify before finalising
-                  </p>
-                )}
-                
-                {onDataChange && (
-                  <button 
-                    onClick={() => addOtherCompany(d.din)}
-                    className="mt-2 flex items-center gap-1.5 text-[9px] font-bold text-navy hover:text-[rgba(26,39,68,0.7)] transition-colors uppercase tracking-wider print:hidden"
-                  >
-                    <Plus className="w-3 h-3" />
-                    Add Row
-                  </button>
-                )}
-              </div>
-            ))}
+              );
+            })}
           </div>
         </section>
 
@@ -623,55 +640,7 @@ export function ReportView({ data, metadata, onDataChange }: ReportViewProps) {
             </tbody>
           </table>
 
-          <h3 className="text-sm font-bold mb-4">11. List of Satisfied Charges</h3>
-          <table className="w-full border-collapse text-xs mb-8">
-            <thead>
-              <tr className="bg-gray-200 text-gray-700">
-                <th className="border border-gray-300 p-2 text-left w-12">Sl.No</th>
-                <th className="border border-gray-300 p-2 text-left">Charge ID</th>
-                <th className="border border-gray-300 p-2 text-left">Charge Holder</th>
-                <th className="border border-gray-300 p-2 text-left">Amount</th>
-                <th className="border border-gray-300 p-2 text-left">Date of Creation</th>
-                <th className="border border-gray-300 p-2 text-left">Date of Satisfaction</th>
-                {onDataChange && <th className="border border-gray-300 p-2 text-center w-12 print:hidden">Actions</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {satisfiedCharges.length > 0 ? (
-                satisfiedCharges.map((c, i) => (
-                  <tr key={c.id || `sat-${i}`} className="bg-white">
-                    <td className="border border-gray-200 p-2">{i + 1}</td>
-                    <td className="border border-gray-200 p-2">{c.id}</td>
-                    <td className="border border-gray-200 p-2">{c.bankName}</td>
-                    <td className="border border-gray-200 p-2">{formatCurrency(c.amountSecured)}</td>
-                    <td className="border border-gray-200 p-2">{c.creationDate}</td>
-                    <td className="border border-gray-200 p-2">
-                      {onDataChange ? (
-                        <input 
-                          className="w-full bg-transparent outline-none focus:bg-white"
-                          value={c.satisfactionDate || ''}
-                          onChange={e => updateCharge(c.id, { satisfactionDate: e.target.value })}
-                        />
-                      ) : c.satisfactionDate || 'N/A'}
-                    </td>
-                    {onDataChange && (
-                      <td className="border border-gray-200 p-2 text-center print:hidden">
-                        <button onClick={() => deleteCharge(c.id)} className="text-red-500 hover:text-red-700">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                        </button>
-                      </td>
-                    )}
-                  </tr>
-                ))
-              ) : (
-                <tr key="no-satisfied-charges">
-                  <td colSpan={onDataChange ? 7 : 6} className="border border-gray-200 p-4 text-center text-gray-400 italic">No satisfied charge data available</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-
-          <h3 className="text-sm font-bold mb-4">12. Particulars of Charges</h3>
+          <h3 className="text-sm font-bold mb-4">11. Particulars of Charges</h3>
           <div className="space-y-8">
             {openCharges.map((c, i) => (
               <div key={c.id || `charge-block-${i}`} className="break-inside-avoid relative group">
@@ -745,7 +714,7 @@ export function ReportView({ data, metadata, onDataChange }: ReportViewProps) {
                 </div>
 
                 {/* Modification Sub-block */}
-                {c.modificationDate && c.modificationDate !== 'N/A' && (
+                {c.modificationDate && c.modificationDate !== 'N/A' && c.modificationDate.toLowerCase() !== 'not available' && c.modificationDate.trim() !== '' && (
                   <div className="ml-8 mt-4 border-l-2 border-navy/20 pl-4">
                     <h4 className="text-xs font-bold text-navy mb-2">
                       {i + 1}.1M Charge Modification on {c.modificationDate} vide charge ID number {c.id}
@@ -756,8 +725,18 @@ export function ReportView({ data, metadata, onDataChange }: ReportViewProps) {
                       </div>
                       <ChargeDetail 
                         label="Updated Amount/Terms" 
-                        value={`${formatCurrency(c.amountSecured)}\nModified on: ${c.modificationDate}`}
-                        onChange={v => updateCharge(c.id, { modificationDate: v.split('Modified on: ')[1] || c.modificationDate })}
+                        value={`${formatCurrency(c.modifiedAmountSecured || c.amountSecured)}\nModified on: ${c.modificationDate}`}
+                        onChange={v => {
+                          const parts = v.split('\n');
+                          const match = parts[0].match(/[\d,]+/);
+                          if (match) {
+                            const num = Number(match[0].replace(/,/g, ''));
+                            updateCharge(c.id, { 
+                              modifiedAmountSecured: num, 
+                              modificationDate: parts.slice(1).join('\n').split('Modified on: ')[1] || c.modificationDate 
+                            });
+                          }
+                        }}
                       />
                     </div>
                   </div>
@@ -769,7 +748,7 @@ export function ReportView({ data, metadata, onDataChange }: ReportViewProps) {
 
         {/* Related Parties */}
         <section>
-          <h3 className="text-sm font-bold mb-4">13. Potential Related Parties</h3>
+          <h3 className="text-sm font-bold mb-4">12. Potential Related Parties</h3>
           
           <div className="space-y-8">
             {/* Table A: Associate / Subsidiary */}

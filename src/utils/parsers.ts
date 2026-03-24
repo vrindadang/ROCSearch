@@ -25,7 +25,16 @@ export async function extractTextFromFile(file: File): Promise<string> {
 
 export async function extractTextFromPdf(file: File): Promise<string> {
   try {
-    const arrayBuffer = await file.arrayBuffer();
+    // Try to read the file immediately. If it fails, wait a bit and retry once.
+    let arrayBuffer: ArrayBuffer;
+    try {
+      arrayBuffer = await file.arrayBuffer();
+    } catch (e) {
+      console.warn(`Initial read failed for ${file.name}, retrying...`, e);
+      await new Promise(resolve => setTimeout(resolve, 500));
+      arrayBuffer = await file.arrayBuffer();
+    }
+
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     let fullText = '';
 
@@ -39,13 +48,24 @@ export async function extractTextFromPdf(file: File): Promise<string> {
     return fullText;
   } catch (err) {
     console.error(`Error extracting text from PDF ${file.name}:`, err);
-    throw new Error(`Failed to read PDF content: ${err instanceof Error ? err.message : String(err)}`);
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    if (errorMessage.includes('permission problems')) {
+      throw new Error(`The file "${file.name}" could not be read by the browser. This often happens if the file was moved or deleted during processing. Please try uploading it again.`);
+    }
+    throw new Error(`Failed to read PDF content: ${errorMessage}`);
   }
 }
 
 export async function extractTextFromDocx(file: File): Promise<string> {
   try {
-    const arrayBuffer = await file.arrayBuffer();
+    let arrayBuffer: ArrayBuffer;
+    try {
+      arrayBuffer = await file.arrayBuffer();
+    } catch (e) {
+      console.warn(`Initial read failed for ${file.name}, retrying...`, e);
+      await new Promise(resolve => setTimeout(resolve, 500));
+      arrayBuffer = await file.arrayBuffer();
+    }
     const result = await mammoth.extractRawText({ arrayBuffer });
     return result.value;
   } catch (err) {
@@ -56,7 +76,14 @@ export async function extractTextFromDocx(file: File): Promise<string> {
 
 export async function extractTextFromExcel(file: File): Promise<string> {
   try {
-    const arrayBuffer = await file.arrayBuffer();
+    let arrayBuffer: ArrayBuffer;
+    try {
+      arrayBuffer = await file.arrayBuffer();
+    } catch (e) {
+      console.warn(`Initial read failed for ${file.name}, retrying...`, e);
+      await new Promise(resolve => setTimeout(resolve, 500));
+      arrayBuffer = await file.arrayBuffer();
+    }
     const workbook = XLSX.read(arrayBuffer, { type: 'array' });
     let fullText = '';
     

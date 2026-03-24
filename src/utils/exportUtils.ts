@@ -358,8 +358,8 @@ export const generatePDF = (data: CompanyData, metadata: ReportMetadata) => {
   let currentY = 35;
 
   // Helper to clean up text and prevent extra information
-  const cleanText = (text: string) => {
-    if (!text) return 'N/A';
+  const cleanText = (text: string, fallback: string = '') => {
+    if (!text || text.trim().toLowerCase() === 'n/a') return fallback;
     
     // If text is very long, it's likely a raw dump, try to extract the actual name
     if (text.length > 200) {
@@ -500,33 +500,73 @@ export const generatePDF = (data: CompanyData, metadata: ReportMetadata) => {
   doc.text('9. Directors Info and Other Directorships', margin, currentY);
   currentY += 8;
 
-  data.directors.forEach(d => {
+  data.directors.forEach((d, idx) => {
     checkPageBreak(30);
     doc.setFontSize(9);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(26, 39, 68);
-    doc.text(`${d.name} (${d.din})`, margin, currentY);
+    doc.text(`${idx + 1}. ${d.name} — (DIN: ${d.din})`, margin, currentY);
     doc.setTextColor(0, 0, 0);
     currentY += 4;
 
+    const hasCessationDate = (d.otherCompanies || []).some(c => c.cessationDate && c.cessationDate.trim() !== "");
+    const head = hasCessationDate 
+      ? [['SNO', 'Current Company', 'Status', 'Appointment Date', 'Cessation Date', 'Industry', 'State']]
+      : [['SNO', 'Current Company', 'Status', 'Appointment Date', 'Industry', 'State']];
+
     autoTable(doc, {
       startY: currentY,
-      head: [['Company Name', 'Status', 'Appt. Date', 'Cessation Date', 'Industry', 'State']],
-      body: (d.otherCompanies || []).map(oc => [
-        cleanText(oc.name), 
-        cleanText(oc.status), 
-        cleanText(oc.appointmentDate), 
-        cleanText(oc.cessationDate || 'N/A'),
-        cleanText(oc.industry), 
-        cleanText(oc.state)
-      ]),
+      head: head,
+      body: (d.otherCompanies || []).map((oc, ocIdx) => {
+        const row = [
+          ocIdx + 1,
+          cleanText(oc.name), 
+          cleanText(oc.status), 
+          cleanText(oc.appointmentDate),
+        ];
+        if (hasCessationDate) {
+          row.push(cleanText(oc.cessationDate));
+        }
+        row.push(cleanText(oc.industry));
+        row.push(cleanText(oc.state));
+        return row;
+      }),
       theme: 'grid',
-      headStyles: { fillColor: [230, 230, 230], textColor: [50, 50, 50], fontSize: 8, fontStyle: 'bold' },
-      bodyStyles: { fontSize: 7 },
+      headStyles: { 
+        fillColor: [245, 245, 245], 
+        textColor: [0, 0, 0], 
+        fontSize: 8, 
+        fontStyle: 'bold',
+        halign: 'center',
+        lineWidth: 0.1,
+        lineColor: [150, 150, 150]
+      },
+      bodyStyles: { 
+        fontSize: 7,
+        lineWidth: 0.1,
+        lineColor: [150, 150, 150]
+      },
+      columnStyles: {
+        0: { halign: 'center', cellWidth: 10 },
+        2: { halign: 'center', cellWidth: 20 },
+        3: { halign: 'center', cellWidth: 25 },
+        4: hasCessationDate ? { halign: 'center', cellWidth: 25 } : { halign: 'center', cellWidth: 20 }
+      },
       margin: { left: margin, right: margin },
       didDrawPage: (data) => { currentY = data.cursor?.y || currentY; }
     });
-    currentY += 10;
+    
+    if (d.otherCompanies && d.otherCompanies.length > 0) {
+      currentY += 4;
+      doc.setFont('helvetica', 'italic');
+      doc.setFontSize(7);
+      doc.setTextColor(120, 120, 120);
+      doc.text('Data fetched from public MCA records — verify before finalising', margin, currentY);
+      doc.setTextColor(0, 0, 0);
+      currentY += 8;
+    } else {
+      currentY += 10;
+    }
   });
   currentY += 5;
 
@@ -552,31 +592,11 @@ export const generatePDF = (data: CompanyData, metadata: ReportMetadata) => {
   });
   currentY += 15;
 
-  // 11. List of Satisfied Charges
-  checkPageBreak(40);
-  doc.setFont('helvetica', 'bold');
-  doc.text('11. List of Satisfied Charges', margin, currentY);
-  currentY += 5;
-
-  const satisfiedCharges = data.charges.filter(c => c.status === 'Satisfied' || (c.satisfactionDate && c.satisfactionDate.trim() !== '' && c.satisfactionDate.toLowerCase() !== 'n/a'));
-  autoTable(doc, {
-    startY: currentY,
-    head: [['Sl.No', 'Charge ID', 'Charge Holder', 'Amount', 'Creation Date', 'Sat. Date']],
-    body: satisfiedCharges.map((c, i) => [i + 1, c.id, c.bankName, `Rs. ${formatCurrency(c.amountSecured)}`, c.creationDate, c.satisfactionDate]),
-    theme: 'grid',
-    headStyles: { fillColor: [200, 200, 200], textColor: [50, 50, 50], fontSize: 9 },
-    bodyStyles: { fontSize: 8 },
-    columnStyles: { 3: { halign: 'right' } },
-    margin: { left: margin, right: margin },
-    didDrawPage: (data) => { currentY = data.cursor?.y || currentY; }
-  });
-  currentY += 15;
-
-  // 12. Particulars of Charges
+  // 11. Particulars of Charges
   doc.addPage();
   currentY = 35;
   doc.setFont('helvetica', 'bold');
-  doc.text('12. Particulars of Charges', margin, currentY);
+  doc.text('11. Particulars of Charges', margin, currentY);
   currentY += 10;
 
   openCharges.forEach((c, i) => {
@@ -628,12 +648,12 @@ export const generatePDF = (data: CompanyData, metadata: ReportMetadata) => {
     currentY += 5;
   });
 
-  // 13. Related Parties
+  // 12. Related Parties
   doc.addPage();
   currentY = 35;
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
-  doc.text('13. Potential Related Parties', margin, currentY);
+  doc.text('12. Potential Related Parties', margin, currentY);
   currentY += 10;
 
   // Table A
