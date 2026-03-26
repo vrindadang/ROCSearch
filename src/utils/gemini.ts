@@ -10,7 +10,7 @@ let aiRequestLock: Promise<void> = Promise.resolve();
  * Specifically handles 429 (RESOURCE_EXHAUSTED) errors.
  * Also ensures that AI requests are processed sequentially across the app.
  */
-async function withRetry<T>(fn: () => Promise<T>, maxRetries = 5, initialDelay = 5000): Promise<T> {
+async function withRetry<T>(fn: () => Promise<T>, maxRetries = 8, initialDelay = 8000): Promise<T> {
   // Wait for the previous request to finish (Sequential Queue)
   const currentLock = aiRequestLock;
   let resolveLock: () => void;
@@ -25,16 +25,24 @@ async function withRetry<T>(fn: () => Promise<T>, maxRetries = 5, initialDelay =
         return await fn();
       } catch (err: any) {
         lastError = err;
-        const isQuotaError = 
+        const isRetryableError = 
           err?.message?.includes("RESOURCE_EXHAUSTED") || 
           err?.status === "RESOURCE_EXHAUSTED" ||
           err?.code === 429 ||
+          err?.error?.code === 429 ||
+          err?.message?.includes("UNAVAILABLE") || 
+          err?.status === "UNAVAILABLE" ||
+          err?.code === 503 ||
+          err?.error?.code === 503 ||
+          err?.error?.status === "UNAVAILABLE" ||
           JSON.stringify(err).includes("429") ||
-          JSON.stringify(err).includes("RESOURCE_EXHAUSTED");
+          JSON.stringify(err).includes("503") ||
+          JSON.stringify(err).includes("RESOURCE_EXHAUSTED") ||
+          JSON.stringify(err).includes("UNAVAILABLE");
 
-        if (isQuotaError && i < maxRetries - 1) {
+        if (isRetryableError && i < maxRetries - 1) {
           const delay = initialDelay * Math.pow(2, i);
-          console.warn(`Gemini quota exhausted. Retrying in ${delay}ms (Attempt ${i + 1}/${maxRetries})...`);
+          console.warn(`Gemini error (Quota/Unavailable). Retrying in ${delay}ms (Attempt ${i + 1}/${maxRetries})...`);
           await new Promise(resolve => setTimeout(resolve, delay));
           continue;
         }
@@ -255,19 +263,6 @@ const companySchema = {
           designation: { type: Type.STRING },
           appointmentDate: { type: Type.STRING },
           totalDirectorships: { type: Type.NUMBER },
-          otherCompanies: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                name: { type: Type.STRING },
-                status: { type: Type.STRING },
-                appointmentDate: { type: Type.STRING },
-                industry: { type: Type.STRING },
-                state: { type: Type.STRING }
-              }
-            }
-          },
           disqualified: { type: Type.BOOLEAN },
           dinDeactivated: { type: Type.BOOLEAN }
         }
@@ -365,42 +360,56 @@ export async function parseCompanyFiles(fileContents: { name: string, content: s
                  - Rule 3: If the numeric figure has an extra "1" prepended (e.g., 11,95,00,000 instead of 1,95,00,000), STRIP the leading "1".
                  - Pay close attention to Lakhs/Crores (Indian Numbering System).
               
-              2. DIRECTOR & SIGNATORY MATCHING:
+              2. DIRECTOR & SIGNATORY MATCHING (CRITICAL):
+                 - Use "Section 6: List of Signatories" or the "List of Signatories" table as the absolute SOURCE OF TRUTH for director information.
                  - Extract ALL signatories, including Company Secretaries (CS).
+                 - "totalDirectorships": Extract the EXACT number from the "Total Directorships" column in this table. 
+                 - For example, if the table shows "11" for a director, you MUST extract 11. If it shows "0", extract 0.
                  - Identify "Common Directorships" by matching DINs/Names from the "Directors Info" section with any "Potential Related Parties" or "Common Directorship" tables found in the documents.
               
-              3. CHARGE MASTER DATA:
-                 - For the "List of Continuing Charges" or "Index of Charges" section, ALL charges listed there are considered "Open" or "Continuing" unless explicitly marked as "Satisfied" or "Closed".
-                 - You MUST set the status to "Open" for all such continuing charges.
-                 - If a Charge ID appears in a summary table but has no details in the "Particulars" section, set its details to "Not Available" (do not invent data).
-                 - IMPORTANT: The "List of Continuing Charges" summary table may show the CURRENT (post-modification) amount, not the original creation amount. If CHG-1 forms are also provided for a charge, ALWAYS use the amount from the CHG-1 Creation form for "amountSecured" and "amountInWords", NOT the summary table amount. The summary table amount should only be used as a fallback when no CHG-1 Creation form exists for that charge.
-                 - If the "Amount in Words" contradicts the numeric "Amount Secured", trust the Amount in Words as ground truth and correct the number accordingly.
-              
-              4. FORMATTING:
-                 - Output all currency in standard Indian format (e.g., ₹ XX,XX,XXX) in your thinking/internal notes, but for the JSON fields, provide raw numbers for numeric fields and formatted strings for word fields.
-                 - If data is missing in the source, write "Not Available" instead of leaving it blank or guessing.
-              
-              5. VALIDATION:
-                 - The "Open Charges" count in the Highlights section MUST exactly match the number of charges in your "charges" array that have status "Open".
-                 - If you find 7 charges in the "List of Continuing Charges", the "charges" array must have 7 items with status "Open", and any summary count must reflect this.
-              
-              CRITICAL INSTRUCTIONS FOR CHG FILES:
-              1. You are a legal document analyst specializing in Indian company charge registrations under the Companies Act. I am providing you with CHG-1 forms for a company. I will provide you multiple CHG-1 documents for the same Charge ID.
-              2. Your task: Generate two separate entries/tables for each Charge ID — one for the original creation and one for the modification.
-              3. UNIQUE IDENTIFICATION (CRITICAL):
-                 - To prevent data merging and ensure both creation and modification amounts are preserved in all report formats:
-                 - The Original Creation entry MUST use the raw Charge ID (e.g., "100452823").
-                 - The Modification entry MUST append " (Modified)" to the Charge ID (e.g., "100452823 (Modified)").
-              4. STRICT RULE FOR AMOUNT SECURED:
-                 - In the Original Charge entry (raw ID): The "amountSecured" MUST be the creation amount from field 3(a)="Creation of charge".
-                 - In the Modification entry (ID with " (Modified)"): The "amountSecured" MUST be the modified amount from field 3(a)="Modification of charge".
-                 - This ensures that export tools which only read the primary "amountSecured" field will display the correct modified amount in the modification section.
-                 - Also populate "modifiedAmountSecured" and "modifiedAmountInWords" in the modification entry for redundancy.
-              5. Label each table clearly as: "Charge Created on [DD/MM/YYYY] vide Charge ID [number]" and "Charge Modification on [DD/MM/YYYY] vide Charge ID [number]" respectively.
-              6. Identify if a CHG file is TYPE A (Real Data) or TYPE B (Blank XFA Template).
-              7. TYPE A files have filled CIN, Bank Name, Amounts, and Dates. Extract EVERYTHING from these.
-              8. TYPE B files are empty templates. Mark them as isBlankXfa: true in fileAnalysis.
-              9. WHEN NO MODIFICATION EXISTS: If there is no CHG-1 modification form for a charge, leave "modifiedAmountSecured" as 0 (or omit it), leave "modifiedAmountInWords" as empty string, and set "modificationDate" to empty string "". Do NOT set modificationDate to "Not Available" — leave it as an empty string so the UI knows there is no modification.
+              CHARGE EXTRACTION RULES (CRITICAL — READ ALL):
+
+              1. CHARGE COUNT INTEGRITY:
+                 - The number of entries in your "charges" array with status "Open" MUST exactly equal 
+                   the number of charges listed in the "List of Continuing Charges" summary table.
+                 - If the summary table shows 7 charges, your output must have exactly 7 charge objects.
+                 - Treat a "Modification" as an update to an existing charge object, NOT a new entry.
+
+              2. CHARGE ID RULE:
+                 - Use the raw numeric Charge ID (e.g., "100452823").
+                 - DO NOT add suffixes like "(Modified)" or "(Original)".
+                 - Each Charge ID must appear only once in your output.
+
+              3. ORIGINAL vs MODIFIED AMOUNTS (CRITICAL):
+                 - "amountSecured": This is the ORIGINAL creation amount. Find the CHG-1 form for "Creation of charge" (Field 3(a)).
+                 - "modifiedAmountSecured": This is the UPDATED amount. Find the CHG-1 form for "Modification of charge" (Field 3(a)).
+                 - If a charge has been modified, these two fields MUST be different.
+                 - If NO modification exists, set "modifiedAmountSecured" to 0 and "modificationDate" to "".
+                 - NEVER copy the same value into both "amountSecured" and "modifiedAmountSecured".
+
+              4. AMOUNT GROUND TRUTH:
+                 - The "Amount in Words" is your definitive source for numeric figures.
+                 - If the numeric field says "11,00,00,000" but the words say "One Crore", the value is 1,00,00,000.
+                 - Strip extra leading "1"s if they contradict the words.
+
+              5. MODIFICATION DATE:
+                 - Use the actual CHG-1 modification filing date.
+                 - Leave as "" if no modification form exists.
+
+              6. SUMMARY TABLE vs CHG-1 FORMS:
+                 - Use the CHG-1 Creation form amount for "amountSecured".
+                 - Use the summary table amount ONLY as a fallback if no CHG-1 form exists.
+
+              7. DETAILED CHARGE PARTICULARS (CRITICAL):
+                 - Extract the following fields exactly as they appear in the CHG-1 forms:
+                 - "propertyCharged": From "Brief Particulars of the Property Charged"
+                 - "termsAndConditions": From "Terms and Conditions"
+                 - "margin": From "Margin"
+                 - "repaymentTerms": From "Terms of Repayment"
+                 - "extentOfCharge": From "Extent and Operation of the Charge"
+                 - "rateOfInterest": From "Rate of Interest"
+                 - DO NOT use "Not Available" if the data is present in the document.
+                 - If the field is long, extract the full text. Do not truncate.
               
               Documents:
               ${combinedText}`
@@ -449,7 +458,7 @@ export async function parseCompanyFiles(fileContents: { name: string, content: s
   }
 }
 
-export async function fetchOtherDirectorships(name: string, din: string): Promise<any> {
+export async function fetchOtherDirectorships(name: string, din: string, totalDirectorships: number): Promise<any> {
   try {
     const response = await withRetry(() => ai.models.generateContent({
       model: "gemini-3-flash-preview",
@@ -460,36 +469,30 @@ export async function fetchOtherDirectorships(name: string, din: string): Promis
             {
               text: `Role: You are an expert Corporate Data Analyst specializing in Indian MCA (Ministry of Corporate Affairs) records.
 
-Primary Data Source: Use ONLY the Google Search tool to find information from https://mycorporateinfo.com/. Do not use general knowledge or other websites if this one is available.
+Primary Data Source: Use ONLY the Google Search tool to find information from https://mycorporateinfo.com/ or https://www.zaubacorp.com/.
 
 Objective: Generate a complete Directorship Report for: ${name} / ${din}.
 
+SOURCE OF TRUTH:
+The official record for this director indicates they have a total of ${totalDirectorships} directorships (including current and past). 
+Your goal is to find exactly ${totalDirectorships} company records.
+
 Extraction Rules (Mandatory):
+1. FULL ENUMERATION: You must find and list EVERY company associated with this person. If the count is ${totalDirectorships}, you must list all ${totalDirectorships}. Do not summarize.
+2. DATA COMPLETENESS: For each company, you MUST find the Status, Appointment Date, Industry, and State.
+3. SEARCH STRATEGY: 
+   - Search for "${din} mycorporateinfo"
+   - Search for "${din} zaubacorp"
+   - Compare results to ensure no companies are missed and the total matches ${totalDirectorships}.
 
-Full Enumeration: You must find and list EVERY company associated with this person. For example, if the person has 11 directorships, you must list all 11. Do not summarize or say "and others."
+Return the data as a JSON array of objects with these exact keys:
+- company_name: Full official name
+- status: Active, Strike Off, Amalgamated, etc.
+- appointment_date: Format DD/MM/YYYY
+- industry: Category of business (MANDATORY: infer from name if not found)
+- state: Full Indian state name (MANDATORY: search for registered office location)
 
-Table Format: Present the data in a clean, Markdown table with the following exact columns:
-
-S.No.
-
-Company Name (Full official name)
-
-Status (Active, Strike Off, Amalgamated, etc.)
-
-Appointment Date (Format: DD/MM/YYYY)
-
-Industry (Category of business) - MANDATORY: If not explicitly found, infer from company name. DO NOT LEAVE BLANK.
-
-State (Location of registered office) - MANDATORY: Search for the city/state of the registered office. DO NOT LEAVE BLANK.
-
-Accuracy Check: If the search results show "Past Directorships" or "Other Directorships," include those as well but note their status correctly.
-
-No Conversational Filler: Start immediately with the table. Do not say "I have searched..." or "Here are the results..."
-
-Format Example (Strictly follow this layout):
-| S.No. | Company Name | Status | Appointment Date | Industry | State |
-|---|---|---|---|---|---|
-| 1 | EXAMPLE PVT LTD | Active | 01/01/2020 | Manufacturing | Maharashtra |`
+Do not include any conversational filler. Return ONLY the JSON array.`
             }
           ]
         }
@@ -504,13 +507,13 @@ Format Example (Strictly follow this layout):
           items: {
             type: Type.OBJECT,
             properties: {
-              s_no: { type: Type.NUMBER },
               company_name: { type: Type.STRING },
               status: { type: Type.STRING },
               appointment_date: { type: Type.STRING },
               industry: { type: Type.STRING },
               state: { type: Type.STRING }
-            }
+            },
+            required: ["company_name", "status", "appointment_date", "industry", "state"]
           }
         }
       }

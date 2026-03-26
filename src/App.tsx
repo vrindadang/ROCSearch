@@ -48,8 +48,10 @@ export default function App() {
   const [files, setFiles] = useState<FileStatus[]>([]);
   const [uploadLogs, setUploadLogs] = useState<UploadLog[]>([]);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisProgress, setAnalysisProgress] = useState(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingDirectorships, setPendingDirectorships] = useState<Record<string, OtherCompany[]>>({});
 
   const addLog = (fileName: string, message: string, type: UploadLog['type'] = 'success') => {
     setUploadLogs(prev => [{
@@ -61,168 +63,105 @@ export default function App() {
     }, ...prev]);
   };
 
-  const handleFetchDirectorships = async (director: Director) => {
-    if (!director.din || (director.otherCompanies && director.otherCompanies.length > 0)) return;
+  const handleFetchDirectorships = async (director: Director, force?: boolean, currentCompanyName?: string, currentCin?: string) => {
+    const isAppended = director.otherCompanies && director.otherCompanies.length > 0;
+    if (!director.din || (pendingDirectorships[director.din] && !force) || (director.hasFetchedDirectorships && !force) || (isAppended && !force)) return;
+
+    // If total directorships is 0, we don't need to fetch anything
+    if (director.totalDirectorships === 0) {
+      setPendingDirectorships(prev => ({
+        ...prev,
+        [director.din]: []
+      }));
+      return;
+    }
+
+    const targetCompanyName = currentCompanyName || companyData.companyName;
+    const targetCin = currentCin || companyData.cin;
 
     setCompanyData(prev => ({
       ...prev,
       directors: prev.directors.map(d => 
-        d.din === director.din ? { ...d, isFetchingDirectorships: true, fetchProgress: "🔍 Searching for companies..." } : d
+        d.din === director.din ? { ...d, isFetchingDirectorships: true, hasFetchedDirectorships: false, fetchProgress: "🔍 Searching for companies..." } : d
       )
     }));
 
     try {
-      // Step 1: Get list of companies
-      const result = await fetchOtherDirectorships(director.name, director.din);
+      const result = await fetchOtherDirectorships(director.name, director.din, director.totalDirectorships);
       
       if (result && Array.isArray(result.otherCompanies)) {
-        // Filter out subject company if it's already in the fetched list
         const otherCompaniesList = result.otherCompanies.filter((c: any) => {
-          const companyName = companyData.companyName || "";
+          const companyName = targetCompanyName || "";
           const fetchedName = c.name || "";
           return fetchedName.toLowerCase() !== companyName.toLowerCase() &&
-                 c.cin !== companyData.cin;
+                 c.cin !== targetCin;
         });
 
-        // Initialize with subject company as the first row
-        let subjectIndustry = companyData.industryDescription || "";
-        let subjectState = companyData.registeredAddress?.split(',').pop()?.trim() || "";
-
-        // If subject info is missing, try to fetch it
-        if (!subjectIndustry || !subjectState) {
-          try {
-            const subjectDetails = await fetchCompanyDetails(companyData.companyName, companyData.cin, director.name);
-            if (!subjectIndustry) subjectIndustry = subjectDetails.industry || "";
-            if (!subjectState) subjectState = subjectDetails.state || "";
-          } catch (e) {
-            console.error("Failed to fetch subject company details:", e);
-          }
-        }
-
-        const subjectCompanyRow: OtherCompany = {
-          id: 'subject-' + director.din,
-          name: companyData.companyName,
-          cin: companyData.cin,
-          status: companyData.status || "Active",
-          appointmentDate: director.appointmentDate || "",
-          cessationDate: "",
-          industry: subjectIndustry,
-          state: subjectState,
+        // Map to OtherCompany type
+        const completeArray: OtherCompany[] = otherCompaniesList.map((c: any) => ({
+          id: Math.random().toString(36).substr(2, 9),
+          name: c.name,
+          cin: c.cin || "",
+          status: c.status || "Active",
+          appointmentDate: c.appointmentDate || "",
+          cessationDate: c.cessationDate || "",
+          industry: c.industry || "Business Services",
+          state: c.state || "Unknown",
           source: 'Auto-fetched'
-        };
-
-        // Start with just the subject company
-        let currentOtherCompanies = [subjectCompanyRow];
-
-        // Update state with initial list
-        setCompanyData(prev => ({
-          ...prev,
-          directors: prev.directors.map(d => 
-            d.din === director.din 
-              ? { ...d, otherCompanies: currentOtherCompanies } 
-              : d
-          )
         }));
 
-        // Step 2: Fetch details for each company sequentially
-        for (let i = 0; i < otherCompaniesList.length; i++) {
-          const company = otherCompaniesList[i];
-          
-          let details;
-          // Only use the initial data if it has the critical fields
-          if (company.hasFullDetails && company.industry && company.state && company.status && company.appointmentDate) {
-            details = {
-              status: company.status || "",
-              appointmentDate: company.appointmentDate || "",
-              cessationDate: "",
-              industry: company.industry || "",
-              state: company.state || ""
-            };
-          } else {
-            // Update progress message
-            setCompanyData(prev => ({
-              ...prev,
-              directors: prev.directors.map(d => 
-                d.din === director.din 
-                  ? { ...d, fetchProgress: `🔍 Fetching details for ${company.name}... (${i + 1}/${otherCompaniesList.length})` } 
-                  : d
-              )
-            }));
-
-            // Add a small delay between calls to avoid rate limiting
-            if (i > 0) {
-              await new Promise(resolve => setTimeout(resolve, 1500));
-            }
-            details = await fetchCompanyDetails(company.name, company.cin, director.name);
-            
-            // If still missing fields, merge with what we had
-            if (company.hasFullDetails) {
-              if (!details.status) details.status = company.status;
-              if (!details.appointmentDate) details.appointmentDate = company.appointmentDate;
-              if (!details.industry) details.industry = company.industry;
-              if (!details.state) details.state = company.state;
-            }
-          }
-          
-          const enrichedCompany: OtherCompany = {
-            id: Math.random().toString(36).substr(2, 9),
-            name: company.name,
-            cin: company.cin || "",
-            status: details.status || "",
-            appointmentDate: details.appointmentDate || "",
-            cessationDate: details.cessationDate || "",
-            industry: details.industry || "",
-            state: details.state || "",
-            source: 'Auto-fetched'
-          };
-
-          currentOtherCompanies = [...currentOtherCompanies, enrichedCompany];
-
-          // Update state incrementally
-          setCompanyData(prev => ({
-            ...prev,
-            directors: prev.directors.map(d => 
-              d.din === director.din 
-                ? { ...d, otherCompanies: currentOtherCompanies } 
-                : d
-            )
-          }));
-        }
-
-        // If no other companies found, add a blank row for manual input
-        if (currentOtherCompanies.length === 1) {
-          setCompanyData(prev => ({
-            ...prev,
-            directors: prev.directors.map(d => 
-              d.din === director.din 
-                ? { 
-                    ...d, 
-                    otherCompanies: [
-                      ...currentOtherCompanies,
-                      { id: Math.random().toString(36).substr(2, 9), name: "", cin: "", status: "", appointmentDate: "", cessationDate: "", industry: "", state: "", source: 'Manually added' }
-                    ] 
-                  } 
-                : d
-            )
-          }));
-        }
+        setPendingDirectorships(prev => ({
+          ...prev,
+          [director.din]: completeArray
+        }));
+      } else {
+        // Even if empty, set it to an empty array so we know it was fetched
+        setPendingDirectorships(prev => ({
+          ...prev,
+          [director.din]: []
+        }));
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error in handleFetchDirectorships:", error);
+      const isUnavailable = JSON.stringify(error).includes("503") || JSON.stringify(error).includes("UNAVAILABLE");
+      const errorMsg = isUnavailable 
+        ? "AI model busy. Please try again in a moment." 
+        : "Failed to fetch directorships.";
+        
       setCompanyData(prev => ({
         ...prev,
         directors: prev.directors.map(d => 
-          d.din === director.din ? { ...d, fetchError: "Failed to fetch directorships. Please try again or add manually." } : d
+          d.din === director.din ? { ...d, fetchError: errorMsg } : d
         )
       }));
     } finally {
       setCompanyData(prev => ({
         ...prev,
         directors: prev.directors.map(d => 
-          d.din === director.din ? { ...d, isFetchingDirectorships: false, fetchProgress: "" } : d
+          d.din === director.din ? { ...d, isFetchingDirectorships: false, hasFetchedDirectorships: true, fetchProgress: "" } : d
         )
       }));
     }
+  };
+
+  const handleApprovePendingDirectorships = (din: string) => {
+    const pending = pendingDirectorships[din];
+    if (!pending) return;
+
+    setCompanyData(prev => ({
+      ...prev,
+      directors: prev.directors.map(d => 
+        d.din === din 
+          ? { ...d, otherCompanies: pending, hasFetchedDirectorships: true }
+          : d
+      )
+    }));
+
+    setPendingDirectorships(prev => {
+      const next = { ...prev };
+      delete next[din];
+      return next;
+    });
   };
 
   const handleFileUpload = useCallback(async (uploadedFiles: File[]) => {
@@ -234,6 +173,7 @@ export default function App() {
     
     setFiles(prev => [...prev, ...newFiles]);
     setIsAnalyzing(true);
+    setAnalysisProgress(5);
     setError(null);
 
     const extractionPromises = uploadedFiles.map(async (file, index) => {
@@ -251,19 +191,23 @@ export default function App() {
     });
 
     const results = await Promise.all(extractionPromises);
+    setAnalysisProgress(20);
     const fileContents = results.filter((r): r is { name: string, content: string } => r !== null);
 
     if (fileContents.length > 0) {
       try {
         const parsedData = await parseCompanyFiles(fileContents);
+        setAnalysisProgress(50);
         
+        // Calculate the new state locally first
+        let fieldsFilled = 0;
+        let fieldsOverwritten = 0;
+        let newChargesCount = 0;
+        let newDirectorsCount = 0;
+
         setCompanyData(prev => {
           const next = { ...prev };
           const fieldMetadata = { ...(prev.fieldMetadata || {}) };
-          let fieldsFilled = 0;
-          let fieldsOverwritten = 0;
-          let newChargesCount = 0;
-          let newDirectorsCount = 0;
 
           // 1. Merge basic fields
           if (parsedData && typeof parsedData === 'object') {
@@ -302,8 +246,6 @@ export default function App() {
 
           (parsedData.charges || []).forEach((c: any) => {
             const existing = chargeMap.get(c.id);
-            
-            // Validate and fix amountSecured if amountInWords is available
             const validatedAmount = validateAndFixAmount(c.amountSecured || 0, c.amountInWords || '');
             
             if (!existing) {
@@ -315,7 +257,6 @@ export default function App() {
               });
               newChargesCount++;
             } else {
-              // Merge missing fields
               const merged = { ...existing };
               let updated = false;
               Object.keys(c).forEach(k => {
@@ -372,13 +313,53 @@ export default function App() {
             });
           });
           next.associateSubsidiaries = Array.from(associateMap.values());
-
           next.fieldMetadata = fieldMetadata;
+
+          // Trigger directorship fetch ONLY for BRAND NEW directors
+          // We do this INSIDE the updater to have access to the most recent state
+          if (parsedData && parsedData.directors && Array.isArray(parsedData.directors)) {
+            const newDirectors = parsedData.directors.filter((d: any) => 
+              !prev.directors?.some(existing => existing.din === d.din)
+            );
+
+            if (newDirectors.length > 0) {
+              // We can't await here, so we fire and forget, but we use the 'next' state
+              setTimeout(async () => {
+                try {
+                  for (let i = 0; i < newDirectors.length; i++) {
+                    const d = newDirectors[i];
+                    const current = next.directors.find((dir: any) => dir.din === d.din);
+                    if (current) {
+                      await handleFetchDirectorships(current, false, next.companyName, next.cin);
+                    }
+                    setAnalysisProgress(50 + Math.round(((i + 1) / newDirectors.length) * 50));
+                  }
+                } finally {
+                  setAnalysisProgress(100);
+                  setTimeout(() => {
+                    setIsAnalyzing(false);
+                    setAnalysisProgress(0);
+                  }, 1000);
+                }
+              }, 0);
+            } else {
+              setAnalysisProgress(100);
+              setTimeout(() => {
+                setIsAnalyzing(false);
+                setAnalysisProgress(0);
+              }, 1000);
+            }
+          } else {
+            setAnalysisProgress(100);
+            setTimeout(() => {
+              setIsAnalyzing(false);
+              setAnalysisProgress(0);
+            }, 1000);
+          }
 
           // Log results
           fileContents.forEach(f => {
             const analysis = (parsedData?.fileAnalysis || []).find((a: any) => a.fileName === f.name);
-            const type = analysis?.fileType || 'Document';
             let msg = `Filled ${fieldsFilled} fields, added ${newChargesCount} charges, added ${newDirectorsCount} directors — ${fieldsOverwritten} fields updated for completeness.`;
             if (analysis?.isBlankXfa) msg = "Detected as blank XFA template. No data extracted.";
             addLog(f.name, msg, analysis?.isBlankXfa ? 'warning' : 'success');
@@ -386,21 +367,21 @@ export default function App() {
 
           return next;
         });
-
-        // Trigger directorship fetch for new directors
-        if (parsedData && parsedData.directors && Array.isArray(parsedData.directors)) {
-          parsedData.directors.forEach((d: any) => {
-            handleFetchDirectorships(d);
-          });
-        }
-
-      } catch (err) {
+      } catch (err: any) {
         console.error('AI Analysis Error:', err);
-        setError('AI analysis failed. Please try again or enter details manually.');
+        const isUnavailable = JSON.stringify(err).includes("503") || JSON.stringify(err).includes("UNAVAILABLE");
+        if (isUnavailable) {
+          setError('The AI model is currently experiencing high demand. Please wait a moment and try again.');
+        } else {
+          setError('AI analysis failed. Please try again or enter details manually.');
+        }
+        setIsAnalyzing(false);
+        setAnalysisProgress(0);
       }
+    } else {
+      setIsAnalyzing(false);
+      setAnalysisProgress(0);
     }
-
-    setIsAnalyzing(false);
   }, [addLog]);
 
   const handleAddManualCharge = (charge: Charge) => {
@@ -439,7 +420,12 @@ export default function App() {
           uploadLogs={uploadLogs}
           onFileUpload={handleFileUpload} 
           isAnalyzing={isAnalyzing}
+          analysisProgress={analysisProgress}
           onAddManual={() => setIsModalOpen(true)}
+          directors={companyData.directors}
+          pendingDirectorships={pendingDirectorships}
+          onApproveDirectorships={handleApprovePendingDirectorships}
+          onSearchDirector={handleFetchDirectorships}
         />
         
         <main className="flex-1 overflow-y-auto p-8 bg-gray-200 flex justify-center">

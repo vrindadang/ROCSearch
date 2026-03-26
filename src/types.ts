@@ -8,6 +8,7 @@ export interface Director {
   disqualified: boolean;
   dinDeactivated: boolean;
   isFetchingDirectorships?: boolean;
+  hasFetchedDirectorships?: boolean;
   fetchProgress?: string;
   fetchError?: string;
 }
@@ -94,6 +95,7 @@ export interface CompanyData {
   charges: Charge[];
   associateSubsidiaries: AssociateSubsidiary[];
   commonDirectorships: CommonDirectorship[];
+  pendingDirectorships?: Record<string, OtherCompany[]>;
   fieldMetadata?: Record<string, { needsVerification: boolean; message: string }>;
 }
 
