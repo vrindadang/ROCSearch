@@ -1,6 +1,6 @@
 import React, { useCallback, useState } from 'react';
 import ReactDOM from 'react-dom';
-import { FileStatus, UploadLog, Director, OtherCompany } from '../types';
+import { FileStatus, UploadLog, Director, OtherCompany, PotentialRelatedParty } from '../types';
 import { Upload, FileText, CheckCircle2, AlertTriangle, XCircle, Loader2, Plus, History, ChevronDown, ChevronUp, Info, Search, User, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { clsx, type ClassValue } from 'clsx';
@@ -11,6 +11,8 @@ function cn(...inputs: ClassValue[]) {
 }
 
 interface SidebarProps {
+  activeTab: 'upload' | 'directors' | 'related-parties';
+  setActiveTab: (tab: 'upload' | 'directors' | 'related-parties') => void;
   files: FileStatus[];
   uploadLogs: UploadLog[];
   onFileUpload: (files: File[]) => void;
@@ -21,9 +23,14 @@ interface SidebarProps {
   pendingDirectorships?: Record<string, OtherCompany[]>;
   onApproveDirectorships?: (din: string) => void;
   onSearchDirector?: (director: Director, force?: boolean) => void;
+  pendingRelatedParties?: PotentialRelatedParty[];
+  isRelatedPartiesAppended?: boolean;
+  onApproveRelatedParties?: () => void;
 }
 
 export function Sidebar({ 
+  activeTab,
+  setActiveTab,
   files = [], 
   uploadLogs = [], 
   onFileUpload, 
@@ -33,11 +40,14 @@ export function Sidebar({
   directors = [],
   pendingDirectorships = {},
   onApproveDirectorships,
-  onSearchDirector
+  onSearchDirector,
+  pendingRelatedParties = [],
+  isRelatedPartiesAppended = false,
+  onApproveRelatedParties
 }: SidebarProps) {
   const [isLogsOpen, setIsLogsOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<'upload' | 'directors'>('upload');
   const [previewDin, setPreviewDin] = useState<string | null>(null);
+  const [isPreviewRelatedPartiesOpen, setIsPreviewRelatedPartiesOpen] = useState(false);
 
   // Auto-switch to upload if directors are cleared
   React.useEffect(() => {
@@ -76,7 +86,7 @@ export function Sidebar({
           <button 
             onClick={() => setActiveTab('directors')}
             className={cn(
-              "flex-1 py-4 text-xs font-bold uppercase tracking-wider border-b-2 transition-all relative",
+              "flex-1 py-4 text-[10px] font-bold uppercase tracking-wider border-b-2 transition-all relative",
               activeTab === 'directors' 
                 ? "border-navy text-navy bg-white" 
                 : "border-transparent text-gray-400 hover:text-gray-600 hover:bg-gray-100/50"
@@ -84,8 +94,26 @@ export function Sidebar({
           >
             Director Search
             {Object.keys(pendingDirectorships).length > 0 && (
-              <span className="absolute top-3 right-3 bg-emerald-500 text-white text-[9px] px-1.5 py-0.5 rounded-full shadow-sm">
+              <span className="absolute top-3 right-2 bg-emerald-500 text-white text-[8px] px-1.5 py-0.5 rounded-full shadow-sm">
                 {Object.keys(pendingDirectorships).length}
+              </span>
+            )}
+          </button>
+        )}
+        {directors.some(d => (d.otherCompanies || []).length > 0) && (
+          <button 
+            onClick={() => setActiveTab('related-parties')}
+            className={cn(
+              "flex-1 py-4 text-[10px] font-bold uppercase tracking-wider border-b-2 transition-all relative",
+              activeTab === 'related-parties' 
+                ? "border-navy text-navy bg-white" 
+                : "border-transparent text-gray-400 hover:text-gray-600 hover:bg-gray-100/50"
+            )}
+          >
+            Related Parties
+            {pendingRelatedParties.length > 0 && !isRelatedPartiesAppended && (
+              <span className="absolute top-3 right-2 bg-emerald-500 text-white text-[8px] px-1.5 py-0.5 rounded-full shadow-sm">
+                {pendingRelatedParties.length}
               </span>
             )}
           </button>
@@ -349,6 +377,52 @@ export function Sidebar({
               })}
             </motion.div>
           )}
+
+          {activeTab === 'related-parties' && (
+            <motion.div 
+              key="related-parties-tab"
+              initial={{ opacity: 0, x: 10 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 10 }}
+              className="flex-1 overflow-y-auto p-4 space-y-4"
+            >
+              <div className="bg-white border border-gray-100 rounded-xl p-4 shadow-sm hover:shadow-md transition-all group">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-navy/5 flex items-center justify-center text-navy group-hover:bg-navy group-hover:text-white transition-all">
+                      <User className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-gray-900">Potential Related Parties</h4>
+                      <p className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">Cross-referenced from directors</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  {isRelatedPartiesAppended ? (
+                    <div className="flex items-center gap-2 text-emerald-600 bg-emerald-50 px-3 py-1.5 rounded-lg w-full justify-center">
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      <span className="text-[11px] font-bold uppercase tracking-tight">Appended to Report</span>
+                    </div>
+                  ) : pendingRelatedParties.length > 0 ? (
+                    <button 
+                      onClick={() => setIsPreviewRelatedPartiesOpen(true)}
+                      className="w-full py-2 bg-navy text-white rounded-lg text-[11px] font-bold hover:bg-navy/90 transition-all flex items-center justify-center gap-2 shadow-sm"
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Review & Approve ({pendingRelatedParties.length})
+                    </button>
+                  ) : (
+                    <div className="flex items-center gap-2 text-gray-400 px-3 py-1.5 italic w-full justify-center">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin opacity-50" />
+                      <span className="text-[11px]">Waiting for director data...</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </motion.div>
+          )}
         </AnimatePresence>
       </div>
       {/* Directorships Preview Modal */}
@@ -445,6 +519,91 @@ export function Sidebar({
                   }
                 }}
                 className="px-8 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 shadow-lg shadow-emerald-200 transition-all flex items-center gap-2"
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                Approve & Append to Report
+              </button>
+            </div>
+          </motion.div>
+        </div>,
+        document.body
+      )}
+      {/* Related Parties Preview Modal */}
+      {isPreviewRelatedPartiesOpen && ReactDOM.createPortal(
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden"
+          >
+            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
+              <div>
+                <h3 className="text-xl font-bold text-gray-900">Potential Related Parties</h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  {pendingRelatedParties.length} companies identified with common directors — review before appending to report
+                </p>
+              </div>
+              <button 
+                onClick={() => setIsPreviewRelatedPartiesOpen(false)}
+                className="p-2 hover:bg-gray-200 rounded-full transition-colors"
+              >
+                <XCircle className="w-6 h-6 text-gray-400" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-auto p-6">
+              <div className="border border-gray-200 rounded-xl overflow-hidden">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-gray-50 border-b border-gray-200">
+                      <th className="px-4 py-3 text-[11px] font-bold text-gray-500 uppercase tracking-wider w-12 text-center">S.No</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-gray-500 uppercase tracking-wider">Current Company</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-gray-500 uppercase tracking-wider w-24">Status</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-gray-500 uppercase tracking-wider w-32">Age of Company (Years)</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-gray-500 uppercase tracking-wider w-32">State</th>
+                      <th className="px-4 py-3 text-[11px] font-bold text-gray-500 uppercase tracking-wider w-40 text-center">No. of Common Directors</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {pendingRelatedParties.map((company, idx) => (
+                      <tr key={company.id} className="hover:bg-gray-50/50 transition-colors">
+                        <td className="px-4 py-3 text-sm text-gray-500 text-center">{idx + 1}</td>
+                        <td className="px-4 py-3">
+                          <p className="text-sm font-bold text-gray-900">{company.name}</p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={cn(
+                            "px-2 py-0.5 rounded-full text-[10px] font-bold uppercase",
+                            company.status?.toLowerCase() === 'active' ? "bg-emerald-100 text-emerald-700" :
+                            company.status?.toLowerCase().includes('strike') ? "bg-red-100 text-red-700" :
+                            "bg-amber-100 text-amber-700"
+                          )}>
+                            {company.status}
+                          </span>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-600">{company.age}</td>
+                        <td className="px-4 py-3 text-sm text-gray-600">{company.state}</td>
+                        <td className="px-4 py-3 text-sm text-gray-900 font-bold text-center">{company.commonDirectorsCount}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between gap-4">
+              <button 
+                onClick={() => setIsPreviewRelatedPartiesOpen(false)}
+                className="px-6 py-2.5 border border-gray-200 text-gray-600 rounded-xl text-sm font-bold hover:bg-gray-100 transition-all"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={() => {
+                  onApproveRelatedParties?.();
+                  setIsPreviewRelatedPartiesOpen(false);
+                }}
+                className="px-8 py-2.5 bg-emerald-600 text-white rounded-xl text-sm font-bold hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-200 flex items-center gap-2"
               >
                 <CheckCircle2 className="w-4 h-4" />
                 Approve & Append to Report

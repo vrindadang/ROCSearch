@@ -3,7 +3,7 @@ import { Sidebar } from './components/Sidebar';
 import { ReportView } from './components/ReportView';
 import { TopBar } from './components/TopBar';
 import { ManualChargeModal } from './components/ManualChargeModal';
-import { CompanyData, ReportMetadata, FileStatus, Charge, UploadLog, Director, OtherCompany, CommonDirectorship, AssociateSubsidiary } from './types';
+import { CompanyData, ReportMetadata, FileStatus, Charge, UploadLog, Director, OtherCompany, CommonDirectorship, AssociateSubsidiary, PotentialRelatedParty } from './types';
 import { extractTextFromFile } from './utils/parsers';
 import { parseCompanyFiles, fetchOtherDirectorships, fetchCompanyDetails } from './utils/gemini';
 import { numberToWords } from './utils/formatters';
@@ -51,7 +51,11 @@ export default function App() {
   const [analysisProgress, setAnalysisProgress] = useState(0);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState<'upload' | 'director-search' | 'related-parties'>('upload');
   const [pendingDirectorships, setPendingDirectorships] = useState<Record<string, OtherCompany[]>>({});
+  const [pendingRelatedParties, setPendingRelatedParties] = useState<PotentialRelatedParty[]>([]);
+  const [approvedRelatedParties, setApprovedRelatedParties] = useState<PotentialRelatedParty[]>([]);
+  const [isRelatedPartiesAppended, setIsRelatedPartiesAppended] = useState(false);
 
   const addLog = (fileName: string, message: string, type: UploadLog['type'] = 'success') => {
     setUploadLogs(prev => [{
@@ -405,6 +409,68 @@ export default function App() {
     }
   };
 
+  const handleApprovePendingRelatedParties = () => {
+    setApprovedRelatedParties(pendingRelatedParties);
+    setIsRelatedPartiesAppended(true);
+  };
+
+  // Compute potential related parties whenever directors' otherCompanies change
+  useEffect(() => {
+    const directors = companyData.directors || [];
+    const companyMap = new Map<string, {
+      name: string;
+      status: string;
+      state: string;
+      directors: Set<string>;
+      cin?: string;
+    }>();
+
+    directors.forEach(director => {
+      if (director.otherCompanies && director.otherCompanies.length > 0) {
+        director.otherCompanies.forEach(oc => {
+          // Normalize company name for deduplication
+          const key = (oc.cin || oc.name).toUpperCase().trim();
+          if (!companyMap.has(key)) {
+            companyMap.set(key, {
+              name: oc.name,
+              status: oc.status,
+              state: oc.state,
+              directors: new Set(),
+              cin: oc.cin
+            });
+          }
+          companyMap.get(key)!.directors.add(director.name);
+        });
+      }
+    });
+
+    const calculateAgeFromCin = (cin?: string) => {
+      if (!cin || cin.length < 10) return "N/A";
+      const yearStr = cin.substring(6, 10);
+      const year = parseInt(yearStr);
+      if (isNaN(year)) return "N/A";
+      const currentYear = new Date().getFullYear();
+      const currentMonth = new Date().getMonth();
+      const age = currentYear - year + (currentMonth / 12);
+      return `${age.toFixed(1)} Years`;
+    };
+
+    const relatedParties: PotentialRelatedParty[] = Array.from(companyMap.values())
+      .filter(c => c.directors.size > 0) // Should always be true if it's in the map
+      .map(c => ({
+        id: Math.random().toString(36).substr(2, 9),
+        name: c.name,
+        status: c.status,
+        age: calculateAgeFromCin(c.cin),
+        state: c.state,
+        commonDirectorsCount: c.directors.size,
+        source: 'Auto-fetched' as const
+      }))
+      .sort((a, b) => b.commonDirectorsCount - a.commonDirectorsCount);
+
+    setPendingRelatedParties(relatedParties);
+  }, [companyData.directors]);
+
   return (
     <div className="flex flex-col h-screen bg-gray-100 overflow-hidden">
       <TopBar 
@@ -416,6 +482,8 @@ export default function App() {
       
       <div className="flex flex-1 overflow-hidden">
         <Sidebar 
+          activeTab={activeTab}
+          setActiveTab={setActiveTab}
           files={files} 
           uploadLogs={uploadLogs}
           onFileUpload={handleFileUpload} 
@@ -426,6 +494,9 @@ export default function App() {
           pendingDirectorships={pendingDirectorships}
           onApproveDirectorships={handleApprovePendingDirectorships}
           onSearchDirector={handleFetchDirectorships}
+          pendingRelatedParties={pendingRelatedParties}
+          isRelatedPartiesAppended={isRelatedPartiesAppended}
+          onApproveRelatedParties={handleApprovePendingRelatedParties}
         />
         
         <main className="flex-1 overflow-y-auto p-8 bg-gray-200 flex justify-center">
@@ -441,6 +512,7 @@ export default function App() {
               data={companyData} 
               metadata={metadata} 
               onDataChange={(newData) => setCompanyData(prev => ({ ...prev, ...newData }))}
+              relatedParties={approvedRelatedParties}
             />
           </div>
         </main>

@@ -74,6 +74,8 @@ export interface CommonDirectorship {
   source: 'Auto-fetched' | 'Manually added';
 }
 
+export interface PotentialRelatedParty extends CommonDirectorship {}
+
 export interface CompanyData {
   companyName: string;
   cin: string;

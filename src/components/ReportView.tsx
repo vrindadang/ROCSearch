@@ -1,5 +1,5 @@
 import React from 'react';
-import { CompanyData, ReportMetadata, Charge, Director, OtherCompany, AssociateSubsidiary, CommonDirectorship } from '../types';
+import { CompanyData, ReportMetadata, Charge, Director, OtherCompany, AssociateSubsidiary, CommonDirectorship, PotentialRelatedParty } from '../types';
 import { FIRM_DETAILS } from '../constants';
 import { formatCurrency, calculateAge } from '../utils/formatters';
 import { clsx, type ClassValue } from 'clsx';
@@ -14,9 +14,10 @@ interface ReportViewProps {
   data: CompanyData;
   metadata: ReportMetadata;
   onDataChange?: (newData: Partial<CompanyData>) => void;
+  relatedParties?: PotentialRelatedParty[];
 }
 
-export function ReportView({ data, metadata, onDataChange }: ReportViewProps) {
+export function ReportView({ data, metadata, onDataChange, relatedParties = [] }: ReportViewProps) {
   const age = calculateAge(data.incorporationDate);
   const directors = data.directors || [];
   const charges = data.charges || [];
@@ -941,6 +942,39 @@ export function ReportView({ data, metadata, onDataChange }: ReportViewProps) {
             </div>
           </div>
         </section>
+
+        {/* Potential Related Parties (Appended from Sidebar) */}
+        {relatedParties.length > 0 && (
+          <section>
+            <h3 className="text-sm font-bold mb-4">13. Potential Related Parties</h3>
+            <div className="border border-gray-200 rounded-sm overflow-hidden">
+              <table className="w-full border-collapse text-[10px]">
+                <thead>
+                  <tr className="bg-navy text-white">
+                    <th className="border border-navy p-1.5 text-left w-8">S.No</th>
+                    <th className="border border-navy p-1.5 text-left">Current Company</th>
+                    <th className="border border-navy p-1.5 text-left">Status</th>
+                    <th className="border border-navy p-1.5 text-left">Age of Company (Years)</th>
+                    <th className="border border-navy p-1.5 text-left">State</th>
+                    <th className="border border-navy p-1.5 text-center w-40">No. of Common Directors</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {relatedParties.map((rp, i) => (
+                    <tr key={rp.id || `rp-${i}`} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                      <td className="border border-gray-200 p-1.5 text-center">{i + 1}</td>
+                      <td className="border border-gray-200 p-1.5 font-bold">{rp.name}</td>
+                      <td className="border border-gray-200 p-1.5">{rp.status}</td>
+                      <td className="border border-gray-200 p-1.5">{rp.age}</td>
+                      <td className="border border-gray-200 p-1.5">{rp.state}</td>
+                      <td className="border border-gray-200 p-1.5 text-center font-bold">{rp.commonDirectorsCount}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )}
       </div>
 
       {/* Footer */}
