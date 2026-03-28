@@ -92,7 +92,7 @@ export default function App() {
     }));
 
     try {
-      const result = await fetchOtherDirectorships(director.name, director.din, director.totalDirectorships);
+      const result = await fetchOtherDirectorships(director.name, director.din, director.totalDirectorships, targetCompanyName);
       
       if (result && Array.isArray(result.otherCompanies)) {
         let otherCompaniesList = [...result.otherCompanies];

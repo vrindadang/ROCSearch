@@ -21,12 +21,13 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { CompanyData, ReportMetadata } from '../types';
 import { FIRM_DETAILS } from '../constants';
-import { formatCurrency } from './formatters';
+import { formatCurrency, formatDate, calculateOutstandingYears } from './formatters';
 
 export const generateWord = async (data: CompanyData, metadata: ReportMetadata) => {
   const navy = "1A2744";
   const lightGrey = "F5F5F5";
   const borderGrey = "E5E5E5";
+  const openCharges = data.charges.filter(c => c.status === 'Open' || (!c.satisfactionDate || c.satisfactionDate.trim() === '' || c.satisfactionDate.toLowerCase() === 'n/a'));
 
   const createTableCell = (text: string, isHeader = false, isAmount = false, bgColor?: string, width?: number) => {
     return new TableCell({
@@ -132,11 +133,11 @@ export const generateWord = async (data: CompanyData, metadata: ReportMetadata) 
         }),
 
         // Content
-        new Paragraph({ text: "1. Name of the Company: " + data.companyName, heading: HeadingLevel.HEADING_3, spacing: { before: 400 } }),
-        new Paragraph({ text: "2. Corporate Identity Number: " + data.cin, heading: HeadingLevel.HEADING_3 }),
-        new Paragraph({ text: "3. Registered Address: " + data.registeredAddress, heading: HeadingLevel.HEADING_3 }),
-        new Paragraph({ text: "4. Status: " + data.status, heading: HeadingLevel.HEADING_3 }),
-        new Paragraph({ text: "5. Date of Incorporation: " + data.incorporationDate, heading: HeadingLevel.HEADING_3 }),
+        new Paragraph({ children: [new TextRun({ text: "1. Name of the Company:    ", bold: true }), new TextRun(data.companyName)], spacing: { before: 400 } }),
+        new Paragraph({ children: [new TextRun({ text: "2. Corporate Identity Number:    ", bold: true }), new TextRun(data.cin)] }),
+        new Paragraph({ children: [new TextRun({ text: "3. Registered Address:    ", bold: true }), new TextRun(data.registeredAddress)] }),
+        new Paragraph({ children: [new TextRun({ text: "4. Status:    ", bold: true }), new TextRun(data.status)] }),
+        new Paragraph({ children: [new TextRun({ text: "5. Date of Incorporation:    ", bold: true }), new TextRun(formatDate(data.incorporationDate))] }),
 
         new Paragraph({ text: "6. Directors/Signatory Details", heading: HeadingLevel.HEADING_2, spacing: { before: 400, after: 200 } }),
         new Table({
@@ -151,7 +152,7 @@ export const generateWord = async (data: CompanyData, metadata: ReportMetadata) 
                 createTableCell(d.name, false, false, i % 2 === 0 ? "FFFFFF" : lightGrey),
                 createTableCell(d.din, false, false, i % 2 === 0 ? "FFFFFF" : lightGrey),
                 createTableCell(d.designation, false, false, i % 2 === 0 ? "FFFFFF" : lightGrey),
-                createTableCell(d.appointmentDate, false, false, i % 2 === 0 ? "FFFFFF" : lightGrey),
+                createTableCell(formatDate(d.appointmentDate), false, false, i % 2 === 0 ? "FFFFFF" : lightGrey),
                 createTableCell(d.totalDirectorships.toString(), false, true, i % 2 === 0 ? "FFFFFF" : lightGrey)
               ]
             }))
@@ -162,12 +163,50 @@ export const generateWord = async (data: CompanyData, metadata: ReportMetadata) 
         new Paragraph({ children: [new TextRun({ text: "Authorised Capital: ", bold: true }), new TextRun(formatCurrency(data.authorizedCapital) + " (" + data.authorizedCapitalWords + ")")] }),
         new Paragraph({ children: [new TextRun({ text: "Paid Up Capital: ", bold: true }), new TextRun(formatCurrency(data.paidUpCapital) + " (" + data.paidUpCapitalWords + ")")] }),
 
+        new Paragraph({ text: "8. Company Highlights", heading: HeadingLevel.HEADING_2, spacing: { before: 400, after: 200 } }),
+        new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          rows: [
+            new TableRow({ children: [createTableCell("CIN", true, false, "F0F0F0"), createTableCell(data.cin), createTableCell("Authorized Capital", true, false, "F0F0F0"), createTableCell(formatCurrency(data.authorizedCapital))] }),
+            new TableRow({ children: [createTableCell("Age", true, false, "F0F0F0"), createTableCell(calculateAge(data.incorporationDate)), createTableCell("Open Charges", true, false, "F0F0F0"), createTableCell(openCharges.length.toString())] }),
+            new TableRow({ children: [createTableCell("Status", true, false, "F0F0F0"), createTableCell(data.status), createTableCell("Paid Up Capital", true, false, "F0F0F0"), createTableCell(formatCurrency(data.paidUpCapital))] }),
+            new TableRow({ children: [createTableCell("Class", true, false, "F0F0F0"), createTableCell(data.companyClass), createTableCell("Last AGM Date", true, false, "F0F0F0"), createTableCell(formatDate(data.lastAgmDate))] }),
+            new TableRow({ children: [createTableCell("Category", true, false, "F0F0F0"), createTableCell(data.companyCategory), createTableCell("Balance Sheet Date", true, false, "F0F0F0"), createTableCell(formatDate(data.lastBalanceSheetDate))] }),
+            new TableRow({ children: [createTableCell("Sub Category", true, false, "F0F0F0"), createTableCell(data.companySubCategory), createTableCell("Email ID", true, false, "F0F0F0"), createTableCell(data.email)] }),
+            new TableRow({ children: [createTableCell("Industry", true, false, "F0F0F0"), createTableCell(data.industryDescription)] }),
+            new TableRow({ children: [createTableCell("Address", true, false, "F0F0F0"), createTableCell(data.registeredAddress)] })
+          ]
+        }),
+
+        new Paragraph({ text: "9. Directors Info and Other Directorships", heading: HeadingLevel.HEADING_2, spacing: { before: 400, after: 200 } }),
+        ...data.directors.flatMap((d, idx) => [
+          new Paragraph({ text: `${idx + 1}. ${d.name} — (DIN: ${d.din})`, heading: HeadingLevel.HEADING_3, spacing: { before: 200, after: 100 } }),
+          new Table({
+            width: { size: 100, type: WidthType.PERCENTAGE },
+            rows: [
+              new TableRow({
+                children: ["SNO", "Current Company", "Status", "Appointment Date", "Industry", "State"].map(h => createTableCell(h, true))
+              }),
+              ...(d.otherCompanies || []).map((oc, ocIdx) => new TableRow({
+                children: [
+                  createTableCell((ocIdx + 1).toString(), false, false, ocIdx % 2 === 0 ? "FFFFFF" : lightGrey),
+                  createTableCell(oc.name, false, false, ocIdx % 2 === 0 ? "FFFFFF" : lightGrey),
+                  createTableCell(oc.status, false, false, ocIdx % 2 === 0 ? "FFFFFF" : lightGrey),
+                  createTableCell(formatDate(oc.appointmentDate), false, false, ocIdx % 2 === 0 ? "FFFFFF" : lightGrey),
+                  createTableCell(oc.industry, false, false, ocIdx % 2 === 0 ? "FFFFFF" : lightGrey),
+                  createTableCell(oc.state, false, false, ocIdx % 2 === 0 ? "FFFFFF" : lightGrey)
+                ]
+              }))
+            ]
+          })
+        ]),
+
         new Paragraph({ text: "10. List of Continuing Charges", heading: HeadingLevel.HEADING_2, spacing: { before: 400, after: 200 } }),
         new Table({
           width: { size: 100, type: WidthType.PERCENTAGE },
           rows: [
             new TableRow({
-              children: ["Sl.No", "Charge ID", "Charge Holder Name", "Amount (In Rupees)", "Date of Creation", "Date of Last Modification"].map(h => createTableCell(h, true))
+              children: ["Sl.No", "Charge ID", "Charge Holder Name", "Amount (In Rupees)", "Date of Creation", "Date of Last Modification", "Outstanding Years"].map(h => createTableCell(h, true))
             }),
             ...data.charges.filter(c => c.status === 'Open' || (!c.satisfactionDate || c.satisfactionDate.trim() === '' || c.satisfactionDate.toLowerCase() === 'n/a')).map((c, i) => new TableRow({
               children: [
@@ -175,76 +214,57 @@ export const generateWord = async (data: CompanyData, metadata: ReportMetadata) 
                 createTableCell(c.id, false, false, i % 2 === 0 ? "FFFFFF" : lightGrey),
                 createTableCell(c.bankName, false, false, i % 2 === 0 ? "FFFFFF" : lightGrey),
                 createTableCell(`Rs. ${formatCurrency(c.amountSecured)}`, false, true, i % 2 === 0 ? "FFFFFF" : lightGrey),
-                createTableCell(c.creationDate, false, false, i % 2 === 0 ? "FFFFFF" : lightGrey),
-                createTableCell(c.modificationDate || 'N/A', false, false, i % 2 === 0 ? "FFFFFF" : lightGrey)
+                createTableCell(formatDate(c.creationDate), false, false, i % 2 === 0 ? "FFFFFF" : lightGrey),
+                createTableCell(formatDate(c.modificationDate) || 'N/A', false, false, i % 2 === 0 ? "FFFFFF" : lightGrey),
+                createTableCell(calculateOutstandingYears(c.creationDate, c.modificationDate), false, false, i % 2 === 0 ? "FFFFFF" : lightGrey)
               ]
             }))
           ]
         }),
 
-        new Paragraph({ text: "12. Particulars of Charges", heading: HeadingLevel.HEADING_2, spacing: { before: 400, after: 200 } }),
+        new Paragraph({ text: "11. Particulars of Charges", heading: HeadingLevel.HEADING_2, spacing: { before: 400, after: 200 } }),
         ...data.charges.filter(c => c.status === 'Open' || (!c.satisfactionDate || c.satisfactionDate.trim() === '' || c.satisfactionDate.toLowerCase() === 'n/a')).flatMap((c, i) => [
-          new Paragraph({ text: `${i + 1}. Charge Created on ${c.creationDate || '[DATE]'} vide charge ID number ${c.id || '[ID]'}`, heading: HeadingLevel.HEADING_3, spacing: { before: 200, after: 100 } }),
+          new Paragraph({ text: `${i + 1}. Charge Created on ${formatDate(c.creationDate) || '[DATE]'} vide charge ID number ${c.id || '[ID]'}`, heading: HeadingLevel.HEADING_3, spacing: { before: 200, after: 100 } }),
           new Table({
             width: { size: 100, type: WidthType.PERCENTAGE },
             rows: [
-              new TableRow({ children: [createTableCell("Name & Address of the Person/Institution In Whose Favour Charge is Created", true, false, "F0F0F0", 40), createTableCell(`${c.bankName || 'Not Available'}${c.bankAddress ? `\n${c.bankAddress}` : '\nAddress not available in records'}`)] }),
-              new TableRow({ children: [createTableCell("Amount Secured By the Charge", true, false, "F0F0F0", 40), createTableCell(`Rs. ${formatCurrency(c.amountSecured)}\n(${c.amountInWords || 'Amount in words not available'})`)] }),
-              new TableRow({ children: [createTableCell("Brief Particulars of the Property Charged", true, false, "F0F0F0", 40), createTableCell(c.propertyCharged || "Not Available")] }),
-              new TableRow({ children: [createTableCell("Terms and Conditions", true, false, "F0F0F0", 40), createTableCell(c.termsAndConditions || "Not Available")] }),
-              new TableRow({ children: [createTableCell("Margin", true, false, "F0F0F0", 40), createTableCell(c.margin || "Not Available")] }),
-              new TableRow({ children: [createTableCell("Terms of Repayment", true, false, "F0F0F0", 40), createTableCell(c.repaymentTerms || "Not Available")] }),
-              new TableRow({ children: [createTableCell("Extent and Operation of the Charge", true, false, "F0F0F0", 40), createTableCell(c.extentOfCharge || "Not Available")] })
+              new TableRow({ children: [createTableCell("1. Name & Address of the Person/Institution In Whose favor Charge is Created", true, false, "F0F0F0", 40), createTableCell(`${c.bankName || 'Not Available'}${c.bankAddress ? `\n${c.bankAddress}` : '\nAddress not available in records'}`)] }),
+              new TableRow({ children: [createTableCell("2. Amount Secured By the Charge", true, false, "F0F0F0", 40), createTableCell(`Rs. ${formatCurrency(c.amountSecured)}\n(${c.amountInWords || 'Amount in words not available'})`)] }),
+              new TableRow({ children: [createTableCell("3. Brief Particulars Of the Property Charged", true, false, "F0F0F0", 40), createTableCell(c.propertyCharged || "Not Available")] }),
+              new TableRow({ children: [createTableCell("4. Terms and Conditions", true, false, "F0F0F0", 40), createTableCell(c.termsAndConditions || "Not Available")] }),
+              new TableRow({ children: [createTableCell("5. Margin", true, false, "F0F0F0", 40), createTableCell(c.margin || "Not Available")] }),
+              new TableRow({ children: [createTableCell("6. Terms of repayment", true, false, "F0F0F0", 40), createTableCell(c.repaymentTerms || "Not Available")] }),
+              new TableRow({ children: [createTableCell("7. Extent and operation of the charge", true, false, "F0F0F0", 40), createTableCell(c.extentOfCharge || "Not Available")] })
             ]
           }),
           ...(c.modificationDate && c.modificationDate !== 'N/A' && c.modificationDate.toLowerCase() !== 'not available' && c.modificationDate.trim() !== '' ? [
-            new Paragraph({ text: `${i + 1}.1M Charge Modification on ${c.modificationDate} vide charge ID number ${c.id}`, heading: HeadingLevel.HEADING_3, spacing: { before: 200, after: 100 } }),
+            new Paragraph({ text: `${i + 1}.1M Charge Modification on ${formatDate(c.modificationDate)} vide charge ID number ${c.id}`, heading: HeadingLevel.HEADING_3, spacing: { before: 200, after: 100 } }),
             new Table({
               width: { size: 100, type: WidthType.PERCENTAGE },
               rows: [
-                new TableRow({ children: [createTableCell("Updated Amount/Terms", true, false, "F0F0F0", 40), createTableCell(`Rs. ${formatCurrency(c.modifiedAmountSecured || c.amountSecured)}\nModified on: ${c.modificationDate}`)] })
+                new TableRow({ children: [createTableCell("Updated Amount/Terms", true, false, "F0F0F0", 40), createTableCell(`Rs. ${formatCurrency(c.modifiedAmountSecured || c.amountSecured)}\nModified on: ${formatDate(c.modificationDate)}`)] })
               ]
             })
           ] : [])
         ]),
 
-        new Paragraph({ text: "13. Potential Related Parties", heading: HeadingLevel.HEADING_2, spacing: { before: 400, after: 200 } }),
-        new Paragraph({ text: "A. Associate / Subsidiary Companies (as per MGT-7)", heading: HeadingLevel.HEADING_3, spacing: { before: 200, after: 100 } }),
+        new Paragraph({ text: "12. Potential Related Parties", heading: HeadingLevel.HEADING_2, spacing: { before: 400, after: 200 } }),
         new Table({
           width: { size: 100, type: WidthType.PERCENTAGE },
           rows: [
             new TableRow({
-              children: ["S.No", "CIN/FCRN", "Name of Company", "Nature", "% Shares"].map(h => createTableCell(h, true))
+              children: ["S.No", "Current Company", "Status", "Age of Company (Years)", "State", "No. of Common Directors"].map(h => createTableCell(h, true))
             }),
-            ...(data.associateSubsidiaries.length > 0 ? data.associateSubsidiaries.map((a, i) => new TableRow({
+            ...(data.potentialRelatedParties && data.potentialRelatedParties.length > 0 ? data.potentialRelatedParties.map((rp, i) => new TableRow({
               children: [
                 createTableCell((i + 1).toString(), false, false, i % 2 === 0 ? "FFFFFF" : lightGrey),
-                createTableCell(a.cin, false, false, i % 2 === 0 ? "FFFFFF" : lightGrey),
-                createTableCell(a.name, false, false, i % 2 === 0 ? "FFFFFF" : lightGrey),
-                createTableCell(a.nature, false, false, i % 2 === 0 ? "FFFFFF" : lightGrey),
-                createTableCell(a.sharesHeld, false, true, i % 2 === 0 ? "FFFFFF" : lightGrey)
+                createTableCell(rp.name, false, false, i % 2 === 0 ? "FFFFFF" : lightGrey),
+                createTableCell(rp.status, false, false, i % 2 === 0 ? "FFFFFF" : lightGrey),
+                createTableCell(rp.age, false, false, i % 2 === 0 ? "FFFFFF" : lightGrey),
+                createTableCell(rp.state, false, false, i % 2 === 0 ? "FFFFFF" : lightGrey),
+                createTableCell(rp.commonDirectorsCount.toString(), false, true, i % 2 === 0 ? "FFFFFF" : lightGrey)
               ]
-            })) : [new TableRow({ children: [createTableCell("No data found in MGT-7 — please verify manually", false, false, "FFFFFF")] })])
-          ]
-        }),
-
-        new Paragraph({ text: "B. Companies with Common Directorship", heading: HeadingLevel.HEADING_3, spacing: { before: 200, after: 100 } }),
-        new Table({
-          width: { size: 100, type: WidthType.PERCENTAGE },
-          rows: [
-            new TableRow({
-              children: ["S.No", "Company Name", "Status", "Age", "State", "Common Directors"].map(h => createTableCell(h, true))
-            }),
-            ...(data.commonDirectorships.length > 0 ? data.commonDirectorships.map((cd, i) => new TableRow({
-              children: [
-                createTableCell((i + 1).toString(), false, false, i % 2 === 0 ? "FFFFFF" : lightGrey),
-                createTableCell(cd.name, false, false, i % 2 === 0 ? "FFFFFF" : lightGrey),
-                createTableCell(cd.status, false, false, i % 2 === 0 ? "FFFFFF" : lightGrey),
-                createTableCell(cd.age, false, false, i % 2 === 0 ? "FFFFFF" : lightGrey),
-                createTableCell(cd.state, false, false, i % 2 === 0 ? "FFFFFF" : lightGrey),
-                createTableCell(cd.commonDirectorsCount.toString(), false, true, i % 2 === 0 ? "FFFFFF" : lightGrey)
-              ]
-            })) : [new TableRow({ children: [createTableCell("No common directorships identified — please verify manually", false, false, "FFFFFF")] })])
+            })) : [new TableRow({ children: [createTableCell("No potential related parties identified — please verify manually", false, false, "FFFFFF")] })])
           ]
         }),
 
@@ -375,20 +395,20 @@ export const generatePDF = (data: CompanyData, metadata: ReportMetadata) => {
   doc.setFont('helvetica', 'bold');
   doc.text('1. Name of the Company:', margin, currentY);
   doc.setFont('helvetica', 'normal');
-  doc.text(data.companyName, margin + 55, currentY);
+  doc.text(data.companyName, margin + 70, currentY);
   currentY += 8;
 
   doc.setFont('helvetica', 'bold');
   doc.text('2. Corporate Identity Number:', margin, currentY);
   doc.setFont('helvetica', 'normal');
-  doc.text(data.cin, margin + 55, currentY);
+  doc.text(data.cin, margin + 70, currentY);
   currentY += 8;
 
   doc.setFont('helvetica', 'bold');
   doc.text('3. Registered Address:', margin, currentY);
   doc.setFont('helvetica', 'normal');
-  const regAddrLines = doc.splitTextToSize(data.registeredAddress, contentWidth - 55);
-  doc.text(regAddrLines, margin + 55, currentY);
+  const regAddrLines = doc.splitTextToSize(data.registeredAddress, contentWidth - 70);
+  doc.text(regAddrLines, margin + 70, currentY);
   currentY += (regAddrLines.length * 5) + 3;
 
   doc.setFont('helvetica', 'bold');
@@ -399,14 +419,14 @@ export const generatePDF = (data: CompanyData, metadata: ReportMetadata) => {
   } else {
     doc.setTextColor(220, 38, 38);
   }
-  doc.text(data.status, margin + 55, currentY);
+  doc.text(data.status, margin + 70, currentY);
   doc.setTextColor(0, 0, 0);
   currentY += 8;
 
   doc.setFont('helvetica', 'bold');
   doc.text('5. Date of Incorporation:', margin, currentY);
   doc.setFont('helvetica', 'normal');
-  doc.text(data.incorporationDate, margin + 55, currentY);
+  doc.text(formatDate(data.incorporationDate), margin + 70, currentY);
   currentY += 15;
 
   // 6. Directors Table
@@ -419,7 +439,7 @@ export const generatePDF = (data: CompanyData, metadata: ReportMetadata) => {
   autoTable(doc, {
     startY: currentY,
     head: [['S.No', 'Director Name', 'DIN', 'Designation', 'Appt. Date', 'Directorships']],
-    body: data.directors.map((d, i) => [i + 1, d.name, d.din, d.designation, d.appointmentDate, d.totalDirectorships]),
+    body: data.directors.map((d, i) => [i + 1, d.name, d.din, d.designation, formatDate(d.appointmentDate), d.totalDirectorships]),
     theme: 'grid',
     headStyles: { fillColor: [26, 39, 68], textColor: [255, 255, 255], fontSize: 9, fontStyle: 'bold' },
     bodyStyles: { fontSize: 8, textColor: [0, 0, 0] },
@@ -438,13 +458,13 @@ export const generatePDF = (data: CompanyData, metadata: ReportMetadata) => {
   doc.text('Authorised Capital:', margin, currentY);
   doc.setFont('helvetica', 'normal');
   const authCapWords = data.authorizedCapitalWords ? ` (${data.authorizedCapitalWords})` : '';
-  doc.text(`Rs. ${formatCurrency(data.authorizedCapital)}${authCapWords}`, margin + 40, currentY);
+  doc.text(`Rs. ${formatCurrency(data.authorizedCapital)}${authCapWords}`, margin + 50, currentY);
   currentY += 6;
   doc.setFont('helvetica', 'bold');
   doc.text('Paid Up Capital:', margin, currentY);
   doc.setFont('helvetica', 'normal');
   const paidUpWords = data.paidUpCapitalWords ? ` (${data.paidUpCapitalWords})` : '';
-  doc.text(`Rs. ${formatCurrency(data.paidUpCapital)}${paidUpWords}`, margin + 40, currentY);
+  doc.text(`Rs. ${formatCurrency(data.paidUpCapital)}${paidUpWords}`, margin + 50, currentY);
   currentY += 15;
 
   // 8. Highlights
@@ -510,10 +530,10 @@ export const generatePDF = (data: CompanyData, metadata: ReportMetadata) => {
           ocIdx + 1,
           cleanText(oc.name), 
           cleanText(oc.status), 
-          cleanText(oc.appointmentDate),
+          formatDate(oc.appointmentDate),
         ];
         if (hasCessationDate) {
-          row.push(cleanText(oc.cessationDate));
+          row.push(formatDate(oc.cessationDate));
         }
         row.push(cleanText(oc.industry));
         row.push(cleanText(oc.state));
@@ -572,8 +592,8 @@ export const generatePDF = (data: CompanyData, metadata: ReportMetadata) => {
 
   autoTable(doc, {
     startY: currentY,
-    head: [['Sl.No', 'Charge ID', 'Charge Holder Name', 'Amount (In Rupees)', 'Date of Creation', 'Date of Last Modification']],
-    body: openCharges.map((c, i) => [i + 1, c.id, c.bankName, `Rs. ${formatCurrency(c.amountSecured)}`, c.creationDate, c.modificationDate || 'N/A']),
+    head: [['Sl.No', 'Charge ID', 'Charge Holder Name', 'Amount (In Rupees)', 'Date of Creation', 'Date of Last Modification', 'Outstanding Years']],
+    body: openCharges.map((c, i) => [i + 1, c.id, c.bankName, `Rs. ${formatCurrency(c.amountSecured)}`, formatDate(c.creationDate), formatDate(c.modificationDate) || 'N/A', calculateOutstandingYears(c.creationDate, c.modificationDate)]),
     theme: 'grid',
     headStyles: { fillColor: [26, 39, 68], textColor: [255, 255, 255], fontSize: 9 },
     bodyStyles: { fontSize: 8 },
@@ -594,19 +614,19 @@ export const generatePDF = (data: CompanyData, metadata: ReportMetadata) => {
     checkPageBreak(80);
     doc.setFontSize(9);
     doc.setFont('helvetica', 'bold');
-    doc.text(`${i + 1}. Charge Created on ${c.creationDate || '[DATE]'} vide charge ID number ${c.id || '[ID]'}`, margin, currentY);
+    doc.text(`${i + 1}. Charge Created on ${formatDate(c.creationDate) || '[DATE]'} vide charge ID number ${c.id || '[ID]'}`, margin, currentY);
     currentY += 5;
 
     autoTable(doc, {
       startY: currentY,
       body: [
-        ['Name & Address of the Person/Institution In Whose Favour Charge is Created', `${c.bankName || 'Not Available'}\n${c.bankAddress || 'Address not available in records'}`],
-        ['Amount Secured By the Charge', `Rs. ${formatCurrency(c.amountSecured)}\n(${c.amountInWords || 'Amount in words not available'})`],
-        ['Brief Particulars of the Property Charged', c.propertyCharged || 'Not Available'],
-        ['Terms and Conditions', c.termsAndConditions || 'Not Available'],
-        ['Margin', c.margin || 'Not Available'],
-        ['Terms of Repayment', c.repaymentTerms || 'Not Available'],
-        ['Extent and Operation of the Charge', c.extentOfCharge || 'Not Available']
+        ['1. Name & Address of the Person/Institution In Whose favor Charge is Created', `${c.bankName || 'Not Available'}\n${c.bankAddress || 'Address not available in records'}`],
+        ['2. Amount Secured By the Charge', `Rs. ${formatCurrency(c.amountSecured)}\n(${c.amountInWords || 'Amount in words not available'})`],
+        ['3. Brief Particulars Of the Property Charged', c.propertyCharged || 'Not Available'],
+        ['4. Terms and Conditions', c.termsAndConditions || 'Not Available'],
+        ['5. Margin', c.margin || 'Not Available'],
+        ['6. Terms of repayment', c.repaymentTerms || 'Not Available'],
+        ['7. Extent and operation of the charge', c.extentOfCharge || 'Not Available']
       ],
       theme: 'grid',
       styles: { fontSize: 8, cellPadding: 2 },
@@ -620,13 +640,13 @@ export const generatePDF = (data: CompanyData, metadata: ReportMetadata) => {
       checkPageBreak(40);
       doc.setFontSize(9);
       doc.setFont('helvetica', 'bold');
-      doc.text(`${i + 1}.1M Charge Modification on ${c.modificationDate} vide charge ID number ${c.id}`, margin, currentY);
+      doc.text(`${i + 1}.1M Charge Modification on ${formatDate(c.modificationDate)} vide charge ID number ${c.id}`, margin, currentY);
       currentY += 5;
 
       autoTable(doc, {
         startY: currentY,
         body: [
-          ['Updated Amount/Terms', `Rs. ${formatCurrency(c.modifiedAmountSecured || c.amountSecured)}\nModified on: ${c.modificationDate}`]
+          ['Updated Amount/Terms', `Rs. ${formatCurrency(c.modifiedAmountSecured || c.amountSecured)}\nModified on: ${formatDate(c.modificationDate)}`]
         ],
         theme: 'grid',
         styles: { fontSize: 8, cellPadding: 2 },
@@ -639,7 +659,7 @@ export const generatePDF = (data: CompanyData, metadata: ReportMetadata) => {
     currentY += 5;
   });
 
-  // 12. Related Parties
+  // 12. Potential Related Parties
   doc.addPage();
   currentY = 35;
   doc.setFont('helvetica', 'bold');
@@ -647,31 +667,12 @@ export const generatePDF = (data: CompanyData, metadata: ReportMetadata) => {
   doc.text('12. Potential Related Parties', margin, currentY);
   currentY += 10;
 
-  // Table A
-  doc.setFontSize(9);
-  doc.text('A. Associate / Subsidiary Companies (as per MGT-7)', margin, currentY);
-  currentY += 5;
   autoTable(doc, {
     startY: currentY,
-    head: [['S.No', 'CIN/FCRN', 'Name of Company', 'Nature', '% Shares']],
-    body: data.associateSubsidiaries.length > 0 ? data.associateSubsidiaries.map((a, i) => [i + 1, a.cin, a.name, a.nature, a.sharesHeld]) : [['-', 'No data found in MGT-7 — please verify manually', '-', '-', '-']],
-    theme: 'grid',
-    headStyles: { fillColor: [26, 39, 68], textColor: [255, 255, 255], fontSize: 8 },
-    bodyStyles: { fontSize: 7 },
-    margin: { left: margin, right: margin },
-    didDrawPage: (data) => { currentY = data.cursor?.y || currentY; }
-  });
-  currentY += 15;
-
-  // Table B
-  checkPageBreak(40);
-  doc.setFontSize(9);
-  doc.text('B. Companies with Common Directorship', margin, currentY);
-  currentY += 5;
-  autoTable(doc, {
-    startY: currentY,
-    head: [['S.No', 'Company Name', 'Status', 'Age', 'State', 'No. of Common Directors']],
-    body: data.commonDirectorships.length > 0 ? data.commonDirectorships.map((cd, i) => [i + 1, cd.name, cd.status, cd.age, cd.state, cd.commonDirectorsCount]) : [['-', 'No common directorships identified — please verify manually', '-', '-', '-', '-']],
+    head: [['S.No', 'Current Company', 'Status', 'Age of Company (Years)', 'State', 'No. of Common Directors']],
+    body: data.potentialRelatedParties && data.potentialRelatedParties.length > 0 
+      ? data.potentialRelatedParties.map((rp, i) => [i + 1, rp.name, rp.status, rp.age, rp.state, rp.commonDirectorsCount]) 
+      : [['-', 'No potential related parties identified — please verify manually', '-', '-', '-', '-']],
     theme: 'grid',
     headStyles: { fillColor: [26, 39, 68], textColor: [255, 255, 255], fontSize: 8 },
     bodyStyles: { fontSize: 7 },

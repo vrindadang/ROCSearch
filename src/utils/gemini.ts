@@ -396,6 +396,7 @@ export async function parseCompanyFiles(fileContents: { name: string, content: s
                  - The "Amount in Words" is your definitive source for numeric figures.
                  - If the numeric field says "11,00,00,000" but the words say "One Crore", the value is 1,00,00,000.
                  - Strip extra leading "1"s if they contradict the words.
+                 - ALWAYS extract the full "Amount in Words" string into the "amountInWords" field.
 
               5. MODIFICATION DATE:
                  - Use the actual CHG-1 modification filing date.
@@ -407,12 +408,17 @@ export async function parseCompanyFiles(fileContents: { name: string, content: s
 
               7. DETAILED CHARGE PARTICULARS (CRITICAL):
                  - Extract the following fields exactly as they appear in the CHG-1 forms:
-                 - "propertyCharged": From "Brief Particulars of the Property Charged"
-                 - "termsAndConditions": From "Terms and Conditions"
-                 - "margin": From "Margin"
-                 - "repaymentTerms": From "Terms of Repayment"
-                 - "extentOfCharge": From "Extent and Operation of the Charge"
-                 - "rateOfInterest": From "Rate of Interest"
+                 - "bankName": Extract the full name of the institution.
+                 - "bankAddress": Extract the COMPLETE address of the institution from the "Name and address of the charge holder" section. Do not truncate.
+                   - If the address is spread across multiple lines, join them with spaces.
+                 - "propertyCharged": From "Brief Particulars of the Property Charged".
+                 - "termsAndConditions": From "Terms and Conditions". 
+                   - IMPORTANT: If the field says "As per attached DPN" or similar, search the document for specific details like "Rate of Interest", "Interest Rate", or any percentage (e.g., "10.40%"). If found, append it to this field.
+                 - "margin": From "Margin".
+                 - "repaymentTerms": From "Terms of Repayment".
+                 - "extentOfCharge": From "Extent and Operation of the Charge". 
+                   - IMPORTANT: If the field says "As per attached DPN", search for specific values like "100%" or "Pari-passu" in the surrounding text and use that if found.
+                 - "rateOfInterest": From "Rate of Interest" or derived from "Terms and Conditions".
                  - DO NOT use "Not Available" if the data is present in the document.
                  - If the field is long, extract the full text. Do not truncate.
               
@@ -463,7 +469,7 @@ export async function parseCompanyFiles(fileContents: { name: string, content: s
   }
 }
 
-export async function fetchOtherDirectorships(name: string, din: string, totalDirectorships: number): Promise<any> {
+export async function fetchOtherDirectorships(name: string, din: string, totalDirectorships: number, currentCompanyName: string): Promise<any> {
   try {
     const response = await withRetry(() => ai.models.generateContent({
       model: "gemini-3-flash-preview",
@@ -472,49 +478,66 @@ export async function fetchOtherDirectorships(name: string, din: string, totalDi
           role: "user",
           parts: [
             {
-              text: `Role: You are an expert Corporate Data Analyst specializing in Indian MCA (Ministry of Corporate Affairs) records.
+              text: `Search for directorship details of the following director and prepare a directorship table. STRICT CONSTRAINTS — DO NOT CHANGE ANYTHING ELSE
 
-Primary Data Source: Use ONLY the Google Search tool to find information from https://mycorporateinfo.com/ or https://www.zaubacorp.com/.
+Director Name: ${name}
+DIN: ${din}
+Total Directorships (as per official MCA record): ${totalDirectorships}
+Current Company (the company for which this ROC report is being prepared): ${currentCompanyName}
 
-Objective: Generate a complete Directorship Report for: ${name} / ${din}.
+---
 
-SOURCE OF TRUTH — DIRECTORSHIP COUNT:
-The official MCA record for this director shows exactly ${totalDirectorships} total directorship(s).
-This count includes the CURRENT COMPANY being searched. Do NOT exceed this count.
+SEARCH INSTRUCTIONS:
 
-CRITICAL RULES — READ CAREFULLY:
+Step 1 — Search these sources in order:
+- Search: "${din} site:mycorporateinfo.com"
+- Search: "${din} site:zaubacorp.com"
+- Search: "${name} ${din} director MCA India"
 
-RULE 1 — COUNT IS AN ABSOLUTE CEILING:
-Your output array must contain AT MOST ${totalDirectorships} entries.
-If you find more results on the web than ${totalDirectorships}, keep only the most relevant ones and discard extras.
-NEVER return more rows than ${totalDirectorships}.
+Step 2 — Collect all company names associated with this DIN from the search results.
+
+Step 3 — Cross-check your collected list against the official count of ${totalDirectorships}.
+
+---
+
+STRICT RULES — YOU MUST FOLLOW ALL OF THESE:
+
+RULE 1 — THE COUNT IS AN ABSOLUTE CEILING:
+The total number of rows in your output must NEVER exceed ${totalDirectorships}.
+If search results show more companies than ${totalDirectorships}, keep only the most credible ones up to the limit and discard the rest.
+Do NOT add extra rows beyond ${totalDirectorships} under any circumstances.
 
 RULE 2 — IF totalDirectorships IS 1:
-Return EXACTLY 1 entry — the current company itself.
 Do NOT search for or add any other companies.
-The only row must be this company: name="${name}", din="${din}".
-Do NOT use search results to add more companies when the count is 1.
+Return exactly 1 row — the current company: ${currentCompanyName}.
+Do not use web search results to add more companies when the official count is 1.
 
 RULE 3 — ALWAYS INCLUDE THE CURRENT COMPANY:
-The company for which this ROC report is being prepared MUST always appear as one of the rows.
-Even if search results do not show it, add it manually using the data provided.
+The company ${currentCompanyName} MUST always appear as one of the rows in your output, regardless of what search results show.
+If search results do not mention it, add it manually.
 
-RULE 4 — NEVER LEAVE THE TABLE EMPTY:
-If no search results are found, or if totalDirectorships is 0 or 1, return at least 1 row — the current company.
+RULE 4 — NEVER RETURN AN EMPTY TABLE:
+Even if no search results are found, always return at least 1 row.
+That row must be the current company: ${currentCompanyName}.
+A blank or empty output is never acceptable.
 
-SEARCH STRATEGY (only apply if totalDirectorships > 1):
-- Search: "${din} mycorporateinfo"
-- Search: "${din} zaubacorp"
-- Combine results but cap at ${totalDirectorships} total entries.
+RULE 5 — NO FABRICATION:
+Do not invent appointment dates, statuses, or company names.
+If a field cannot be confirmed from search results, use the data provided in this prompt or leave that field blank.
+Do not guess.
 
-Return the data as a JSON array of objects with these exact keys:
-- company_name: Full official name
-- status: Active, Strike Off, Amalgamated, etc.
-- appointment_date: Format YYYY-MM-DD (CRITICAL: convert from DD/MM/YYYY)
-- industry: Category of business (MANDATORY: infer from name if not found)
-- state: Full Indian state name (MANDATORY: search for registered office location)
+---
 
-Do not include any conversational filler. Return ONLY the JSON array.`
+OUTPUT FORMAT:
+
+Return a JSON array only. No explanation. No preamble. No markdown.
+
+Each object must have exactly these keys:
+- company_name
+- status         (Active / Strike Off / Amalgamated / Dissolved — as found)
+- appointment_date   (DD/MM/YYYY format)
+- industry       (specific business description — infer from company name if not found online)
+- state          (full Indian state name of registered office — e.g. Delhi, Maharashtra, Tamil Nadu)`
             }
           ]
         }
@@ -531,7 +554,7 @@ Do not include any conversational filler. Return ONLY the JSON array.`
             properties: {
               company_name: { type: Type.STRING },
               status: { type: Type.STRING },
-              appointment_date: { type: Type.STRING, description: "Date in YYYY-MM-DD format" },
+              appointment_date: { type: Type.STRING, description: "Date in DD/MM/YYYY format" },
               industry: { type: Type.STRING },
               state: { type: Type.STRING }
             },
@@ -551,14 +574,30 @@ Do not include any conversational filler. Return ONLY the JSON array.`
       const data = JSON.parse(text);
       if (Array.isArray(data)) {
         return {
-          otherCompanies: data.map(item => ({
-            name: item.company_name || item.companyname || "",
-            status: item.status || "",
-            appointmentDate: item.appointment_date || item.appointmentdate || "",
-            industry: item.industry || "",
-            state: item.state || "",
-            hasFullDetails: true
-          }))
+          otherCompanies: data.map(item => {
+            // Convert DD/MM/YYYY to YYYY-MM-DD for internal consistency if possible
+            let appointmentDate = item.appointment_date || item.appointmentdate || "";
+            if (appointmentDate && appointmentDate.includes('/')) {
+              const parts = appointmentDate.split('/');
+              if (parts.length === 3) {
+                const day = parts[0].padStart(2, '0');
+                const month = parts[1].padStart(2, '0');
+                const year = parts[2];
+                if (year.length === 4) {
+                  appointmentDate = `${year}-${month}-${day}`;
+                }
+              }
+            }
+
+            return {
+              name: item.company_name || item.companyname || "",
+              status: item.status || "",
+              appointmentDate: appointmentDate,
+              industry: item.industry || "",
+              state: item.state || "",
+              hasFullDetails: true
+            };
+          })
         };
       }
       return { otherCompanies: [] };

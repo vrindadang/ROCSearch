@@ -1,7 +1,7 @@
 import React from 'react';
 import { CompanyData, ReportMetadata, Charge, Director, OtherCompany, AssociateSubsidiary, CommonDirectorship, PotentialRelatedParty } from '../types';
 import { FIRM_DETAILS } from '../constants';
-import { formatCurrency, calculateAge } from '../utils/formatters';
+import { formatCurrency, calculateAge, formatDate, calculateOutstandingYears } from '../utils/formatters';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { Loader2, Plus, Trash2, AlertCircle } from 'lucide-react';
@@ -26,6 +26,49 @@ export function ReportView({ data, metadata, onDataChange, relatedParties = [] }
   
   const openCharges = charges.filter(c => c.status === 'Open' || (!c.satisfactionDate || c.satisfactionDate.trim() === '' || c.satisfactionDate.toLowerCase() === 'n/a'));
   const satisfiedCharges = charges.filter(c => c.status === 'Satisfied' || (c.satisfactionDate && c.satisfactionDate.trim() !== '' && c.satisfactionDate.toLowerCase() !== 'n/a'));
+
+  const calculateOutstandingYears = (creationDate: string, modificationDate?: string) => {
+    const lastDateStr = modificationDate && 
+      modificationDate !== 'N/A' && 
+      modificationDate !== '-' && 
+      modificationDate.trim() !== '' && 
+      modificationDate.toLowerCase() !== 'not available'
+      ? modificationDate 
+      : creationDate;
+      
+    if (!lastDateStr || lastDateStr === 'N/A' || lastDateStr === '-' || lastDateStr.trim() === '' || lastDateStr.toLowerCase() === 'not available') return '-';
+    
+    // Handle different date formats (YYYY-MM-DD or DD/MM/YYYY or DD-MM-YYYY)
+    let date: Date;
+    if (lastDateStr.includes('/')) {
+      const parts = lastDateStr.split('/');
+      if (parts.length === 3) {
+        // Assuming DD/MM/YYYY
+        date = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+      } else {
+        date = new Date(lastDateStr);
+      }
+    } else if (lastDateStr.includes('-') && lastDateStr.split('-')[0].length !== 4) {
+      const parts = lastDateStr.split('-');
+      if (parts.length === 3) {
+        // Assuming DD-MM-YYYY
+        date = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
+      } else {
+        date = new Date(lastDateStr);
+      }
+    } else {
+      date = new Date(lastDateStr);
+    }
+
+    if (isNaN(date.getTime())) return '-';
+    
+    const today = new Date();
+    const diffTime = today.getTime() - date.getTime();
+    if (diffTime < 0) return '0.0 Years';
+    
+    const diffYears = diffTime / (1000 * 60 * 60 * 24 * 365.25);
+    return `${diffYears.toFixed(1)} ${diffYears === 1 ? 'Year' : 'Years'}`;
+  };
 
   const updateDirector = (din: string, updates: Partial<Director>) => {
     if (!onDataChange) return;
@@ -266,7 +309,7 @@ export function ReportView({ data, metadata, onDataChange, relatedParties = [] }
           </div>
           <div>
             <p className="text-gray-500 font-medium">Date:</p>
-            <p className="font-bold">{new Date(metadata.reportDate).toLocaleDateString('en-IN', { day: '2-digit', month: 'long', year: 'numeric' })}</p>
+            <p className="font-bold">{formatDate(metadata.reportDate)}</p>
           </div>
         </div>
       </div>
@@ -331,7 +374,7 @@ export function ReportView({ data, metadata, onDataChange, relatedParties = [] }
                   value={data.incorporationDate}
                   onChange={e => onDataChange({ incorporationDate: e.target.value })}
                 />
-              ) : data.incorporationDate}
+              ) : formatDate(data.incorporationDate)}
             </span>
           </div>
         </section>
@@ -400,7 +443,7 @@ export function ReportView({ data, metadata, onDataChange, relatedParties = [] }
                           value={d.appointmentDate}
                           onChange={e => updateDirector(d.din, { appointmentDate: e.target.value })}
                         />
-                      ) : d.appointmentDate}
+                      ) : formatDate(d.appointmentDate)}
                     </td>
                     <td className="border border-gray-200 p-2 text-center">
                       {onDataChange ? (
@@ -630,7 +673,7 @@ export function ReportView({ data, metadata, onDataChange, relatedParties = [] }
                                   value={c.appointmentDate || ''}
                                   onChange={e => updateOtherCompany(d.din, c.id, { appointmentDate: e.target.value })}
                                 />
-                              ) : c.appointmentDate || ''}
+                              ) : formatDate(c.appointmentDate)}
                             </td>
                             {hasCessationDate && (
                               <td className="border border-gray-300 p-2 text-center">
@@ -640,7 +683,7 @@ export function ReportView({ data, metadata, onDataChange, relatedParties = [] }
                                     value={c.cessationDate || ''}
                                     onChange={e => updateOtherCompany(d.din, c.id, { cessationDate: e.target.value })}
                                   />
-                                ) : c.cessationDate || ''}
+                                ) : formatDate(c.cessationDate)}
                               </td>
                             )}
                             <td className="border border-gray-300 p-2">
@@ -746,6 +789,7 @@ export function ReportView({ data, metadata, onDataChange, relatedParties = [] }
                 <th className="border border-navy p-2 text-left">Charge ID</th>
                 <th className="border border-navy p-2 text-left">Charge Holder Name</th>
                 <th className="border border-navy p-2 text-left">Amount (In Rupees)</th>
+                <th className="border border-navy p-2 text-left">Outstanding Years</th>
                 <th className="border border-navy p-2 text-left">Date of Creation</th>
                 <th className="border border-navy p-2 text-left">Date of Last Modification</th>
                 {onDataChange && <th className="border border-navy p-2 text-center w-12 print:hidden">Actions</th>}
@@ -784,6 +828,9 @@ export function ReportView({ data, metadata, onDataChange, relatedParties = [] }
                         />
                       ) : formatCurrency(c.amountSecured)}
                     </td>
+                    <td className="border border-gray-200 p-2 font-medium text-navy">
+                      {calculateOutstandingYears(c.creationDate, c.modificationDate)}
+                    </td>
                     <td className="border border-gray-200 p-2">
                       {onDataChange ? (
                         <input 
@@ -791,7 +838,7 @@ export function ReportView({ data, metadata, onDataChange, relatedParties = [] }
                           value={c.creationDate}
                           onChange={e => updateCharge(c.id, { creationDate: e.target.value })}
                         />
-                      ) : c.creationDate}
+                      ) : formatDate(c.creationDate)}
                     </td>
                     <td className="border border-gray-200 p-2">
                       {onDataChange ? (
@@ -800,7 +847,7 @@ export function ReportView({ data, metadata, onDataChange, relatedParties = [] }
                           value={c.modificationDate || ''}
                           onChange={e => updateCharge(c.id, { modificationDate: e.target.value })}
                         />
-                      ) : c.modificationDate || 'N/A'}
+                      ) : formatDate(c.modificationDate)}
                     </td>
                     {onDataChange && (
                       <td className="border border-gray-200 p-2 text-center print:hidden">
@@ -813,7 +860,7 @@ export function ReportView({ data, metadata, onDataChange, relatedParties = [] }
                 ))
               ) : (
                 <tr key="no-open-charges">
-                  <td colSpan={onDataChange ? 7 : 6} className="border border-gray-200 p-4 text-center text-gray-400 italic">No open charge data available</td>
+                  <td colSpan={onDataChange ? 8 : 7} className="border border-gray-200 p-4 text-center text-gray-400 italic">No open charge data available</td>
                 </tr>
               )}
             </tbody>
@@ -826,7 +873,7 @@ export function ReportView({ data, metadata, onDataChange, relatedParties = [] }
                 <div className="mb-4">
                   <div className="flex items-center justify-between mb-1">
                     <h4 className="text-xs font-bold text-navy">
-                      {i + 1}. Charge Created on {c.creationDate || '[DATE]'} vide charge ID number {c.id || '[ID]'}
+                      {i + 1}. Charge Created on {formatDate(c.creationDate)} vide charge ID number {c.id || '[ID]'}
                       {c.isManual && <span className="ml-2 px-1.5 py-0.5 bg-[rgba(26,39,68,0.1)] text-navy text-[8px] rounded uppercase">Manually entered</span>}
                     </h4>
                     {onDataChange && (
@@ -838,7 +885,7 @@ export function ReportView({ data, metadata, onDataChange, relatedParties = [] }
                   
                   <div className="grid grid-cols-1 border border-gray-200 text-[10px]">
                     <ChargeDetail 
-                      label="Name & Address of the Person/Institution In Whose Favour Charge is Created" 
+                      label="1. Name & Address of the Person/Institution In Whose favor Charge is Created" 
                       value={`${c.bankName || 'Not Available'}${c.bankAddress ? `\n${c.bankAddress}` : '\nAddress not available in records'}`} 
                       metadata={c.needsVerification ? { needsVerification: true, message: c.verificationMessage || '' } : undefined}
                       onChange={v => {
@@ -847,7 +894,7 @@ export function ReportView({ data, metadata, onDataChange, relatedParties = [] }
                       }}
                     />
                     <ChargeDetail 
-                      label="Amount Secured By the Charge" 
+                      label="2. Amount Secured By the Charge" 
                       value={`Rs. ${formatCurrency(c.amountSecured)}\n(${c.amountInWords || 'Amount in words not available'})`} 
                       metadata={c.needsVerification ? { needsVerification: true, message: c.verificationMessage || '' } : undefined}
                       onChange={v => {
@@ -860,31 +907,31 @@ export function ReportView({ data, metadata, onDataChange, relatedParties = [] }
                       }}
                     />
                     <ChargeDetail 
-                      label="Brief Particulars of the Property Charged" 
+                      label="3. Brief Particulars Of the Property Charged" 
                       value={c.propertyCharged || "Not Available"} 
                       metadata={c.needsVerification ? { needsVerification: true, message: c.verificationMessage || '' } : undefined}
                       onChange={v => updateCharge(c.id, { propertyCharged: v, isDetailed: true })}
                     />
                     <ChargeDetail 
-                      label="Terms and Conditions" 
+                      label="4. Terms and Conditions" 
                       value={c.termsAndConditions || "Not Available"} 
                       metadata={c.needsVerification ? { needsVerification: true, message: c.verificationMessage || '' } : undefined}
                       onChange={v => updateCharge(c.id, { termsAndConditions: v, isDetailed: true })}
                     />
                     <ChargeDetail 
-                      label="Margin" 
+                      label="5. Margin" 
                       value={c.margin || "Not Available"} 
                       metadata={c.needsVerification ? { needsVerification: true, message: c.verificationMessage || '' } : undefined}
                       onChange={v => updateCharge(c.id, { margin: v, isDetailed: true })}
                     />
                     <ChargeDetail 
-                      label="Terms of Repayment" 
+                      label="6. Terms of repayment" 
                       value={c.repaymentTerms || "Not Available"} 
                       metadata={c.needsVerification ? { needsVerification: true, message: c.verificationMessage || '' } : undefined}
                       onChange={v => updateCharge(c.id, { repaymentTerms: v, isDetailed: true })}
                     />
                     <ChargeDetail 
-                      label="Extent and Operation of the Charge" 
+                      label="7. Extent and operation of the charge" 
                       value={c.extentOfCharge || "Not Available"} 
                       metadata={c.needsVerification ? { needsVerification: true, message: c.verificationMessage || '' } : undefined}
                       onChange={v => updateCharge(c.id, { extentOfCharge: v, isDetailed: true })}
@@ -896,7 +943,7 @@ export function ReportView({ data, metadata, onDataChange, relatedParties = [] }
                 {c.modificationDate && c.modificationDate !== 'N/A' && c.modificationDate.toLowerCase() !== 'not available' && c.modificationDate.trim() !== '' && (
                   <div className="ml-8 mt-4 border-l-2 border-navy/20 pl-4">
                     <h4 className="text-xs font-bold text-navy mb-2">
-                      {i + 1}.1M Charge Modification on {c.modificationDate} vide charge ID number {c.id}
+                      {i + 1}.1M Charge Modification on {formatDate(c.modificationDate)} vide charge ID number {c.id}
                     </h4>
                     <div className="grid grid-cols-1 border border-gray-200 text-[10px] opacity-90">
                       <div className="p-2 bg-gray-50 italic text-[9px] text-gray-500 border-b border-gray-200">
@@ -904,7 +951,7 @@ export function ReportView({ data, metadata, onDataChange, relatedParties = [] }
                       </div>
                       <ChargeDetail 
                         label="Updated Amount/Terms" 
-                        value={`${formatCurrency(c.modifiedAmountSecured || c.amountSecured)}\nModified on: ${c.modificationDate}`}
+                        value={`${formatCurrency(c.modifiedAmountSecured || c.amountSecured)}\nModified on: ${formatDate(c.modificationDate)}`}
                         onChange={v => {
                           const parts = v.split('\n');
                           const match = parts[0].match(/[\d,]+/);
