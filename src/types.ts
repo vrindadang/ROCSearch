@@ -97,6 +97,7 @@ export interface CompanyData {
   charges: Charge[];
   associateSubsidiaries: AssociateSubsidiary[];
   commonDirectorships: CommonDirectorship[];
+  potentialRelatedParties?: PotentialRelatedParty[];
   pendingDirectorships?: Record<string, OtherCompany[]>;
   fieldMetadata?: Record<string, { needsVerification: boolean; message: string }>;
 }

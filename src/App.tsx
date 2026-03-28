@@ -33,6 +33,7 @@ const INITIAL_COMPANY_DATA: CompanyData = {
   charges: [],
   associateSubsidiaries: [],
   commonDirectorships: [],
+  potentialRelatedParties: [],
 };
 
 const INITIAL_METADATA: ReportMetadata = {
@@ -94,12 +95,26 @@ export default function App() {
       const result = await fetchOtherDirectorships(director.name, director.din, director.totalDirectorships);
       
       if (result && Array.isArray(result.otherCompanies)) {
-        const otherCompaniesList = result.otherCompanies.filter((c: any) => {
-          const companyName = targetCompanyName || "";
-          const fetchedName = c.name || "";
-          return fetchedName.toLowerCase() !== companyName.toLowerCase() &&
-                 c.cin !== targetCin;
+        let otherCompaniesList = [...result.otherCompanies];
+        
+        // Ensure the current company is in the list
+        const hasCurrentCompany = otherCompaniesList.some((c: any) => {
+          const fetchedName = (c.name || "").toLowerCase();
+          const currentName = (targetCompanyName || "").toLowerCase();
+          return fetchedName === currentName || (c.cin && c.cin === targetCin);
         });
+
+        if (!hasCurrentCompany && targetCompanyName) {
+          otherCompaniesList.unshift({
+            name: targetCompanyName,
+            cin: targetCin || "",
+            status: companyData.status || "Active",
+            appointmentDate: director.appointmentDate || "",
+            industry: companyData.industryDescription || "Business Services",
+            state: "Unknown",
+            source: 'Auto-fetched'
+          });
+        }
 
         // Map to OtherCompany type
         const completeArray: OtherCompany[] = otherCompaniesList.map((c: any) => ({
@@ -119,10 +134,22 @@ export default function App() {
           [director.din]: completeArray
         }));
       } else {
-        // Even if empty, set it to an empty array so we know it was fetched
+        // Even if empty, at least add the current company
+        const defaultCompany: OtherCompany[] = [{
+          id: Math.random().toString(36).substr(2, 9),
+          name: targetCompanyName || "",
+          cin: targetCin || "",
+          status: companyData.status || "Active",
+          appointmentDate: director.appointmentDate || "",
+          cessationDate: "",
+          industry: companyData.industryDescription || "Business Services",
+          state: "Unknown",
+          source: 'Auto-fetched'
+        }];
+
         setPendingDirectorships(prev => ({
           ...prev,
-          [director.din]: []
+          [director.din]: defaultCompany
         }));
       }
     } catch (error: any) {
@@ -410,7 +437,10 @@ export default function App() {
   };
 
   const handleApprovePendingRelatedParties = () => {
-    setApprovedRelatedParties(pendingRelatedParties);
+    setCompanyData(prev => ({
+      ...prev,
+      potentialRelatedParties: pendingRelatedParties
+    }));
     setIsRelatedPartiesAppended(true);
   };
 
@@ -425,18 +455,31 @@ export default function App() {
       cin?: string;
     }>();
 
+    // First pass: Map names to CINs to ensure consistent keys even if CIN is missing in some records
+    const nameToCin = new Map<string, string>();
+    directors.forEach(director => {
+      (director.otherCompanies || []).forEach(oc => {
+        if (oc.cin && oc.cin.trim()) {
+          nameToCin.set(oc.name.toUpperCase().trim(), oc.cin.toUpperCase().trim());
+        }
+      });
+    });
+
     directors.forEach(director => {
       if (director.otherCompanies && director.otherCompanies.length > 0) {
         director.otherCompanies.forEach(oc => {
-          // Normalize company name for deduplication
-          const key = (oc.cin || oc.name).toUpperCase().trim();
+          const normalizedName = oc.name.toUpperCase().trim();
+          // Use CIN as key if available (either in this record or found in another record for same name)
+          // Fallback to normalized name
+          const key = nameToCin.get(normalizedName) || normalizedName;
+          
           if (!companyMap.has(key)) {
             companyMap.set(key, {
               name: oc.name,
               status: oc.status,
               state: oc.state,
               directors: new Set(),
-              cin: oc.cin
+              cin: oc.cin || nameToCin.get(normalizedName)
             });
           }
           companyMap.get(key)!.directors.add(director.name);

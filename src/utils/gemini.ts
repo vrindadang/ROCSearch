@@ -360,7 +360,12 @@ export async function parseCompanyFiles(fileContents: { name: string, content: s
                  - Rule 3: If the numeric figure has an extra "1" prepended (e.g., 11,95,00,000 instead of 1,95,00,000), STRIP the leading "1".
                  - Pay close attention to Lakhs/Crores (Indian Numbering System).
               
-              2. DIRECTOR & SIGNATORY MATCHING (CRITICAL):
+              2. DATE FORMAT (CRITICAL):
+                 - ALL dates MUST be returned in ISO format: YYYY-MM-DD.
+                 - Example: If the document shows "24/07/2000", return "2000-07-24".
+                 - This is essential for "incorporationDate" to calculate company age.
+
+              3. DIRECTOR & SIGNATORY MATCHING (CRITICAL):
                  - Use "Section 6: List of Signatories" or the "List of Signatories" table as the absolute SOURCE OF TRUTH for director information.
                  - Extract ALL signatories, including Company Secretaries (CS).
                  - "totalDirectorships": Extract the EXACT number from the "Total Directorships" column in this table. 
@@ -473,22 +478,39 @@ Primary Data Source: Use ONLY the Google Search tool to find information from ht
 
 Objective: Generate a complete Directorship Report for: ${name} / ${din}.
 
-SOURCE OF TRUTH:
-The official record for this director indicates they have a total of ${totalDirectorships} directorships (including current and past). 
-Your goal is to find exactly ${totalDirectorships} company records.
+SOURCE OF TRUTH — DIRECTORSHIP COUNT:
+The official MCA record for this director shows exactly ${totalDirectorships} total directorship(s).
+This count includes the CURRENT COMPANY being searched. Do NOT exceed this count.
 
-Extraction Rules (Mandatory):
-1. FULL ENUMERATION: You must find and list EVERY company associated with this person. If the count is ${totalDirectorships}, you must list all ${totalDirectorships}. Do not summarize.
-2. DATA COMPLETENESS: For each company, you MUST find the Status, Appointment Date, Industry, and State.
-3. SEARCH STRATEGY: 
-   - Search for "${din} mycorporateinfo"
-   - Search for "${din} zaubacorp"
-   - Compare results to ensure no companies are missed and the total matches ${totalDirectorships}.
+CRITICAL RULES — READ CAREFULLY:
+
+RULE 1 — COUNT IS AN ABSOLUTE CEILING:
+Your output array must contain AT MOST ${totalDirectorships} entries.
+If you find more results on the web than ${totalDirectorships}, keep only the most relevant ones and discard extras.
+NEVER return more rows than ${totalDirectorships}.
+
+RULE 2 — IF totalDirectorships IS 1:
+Return EXACTLY 1 entry — the current company itself.
+Do NOT search for or add any other companies.
+The only row must be this company: name="${name}", din="${din}".
+Do NOT use search results to add more companies when the count is 1.
+
+RULE 3 — ALWAYS INCLUDE THE CURRENT COMPANY:
+The company for which this ROC report is being prepared MUST always appear as one of the rows.
+Even if search results do not show it, add it manually using the data provided.
+
+RULE 4 — NEVER LEAVE THE TABLE EMPTY:
+If no search results are found, or if totalDirectorships is 0 or 1, return at least 1 row — the current company.
+
+SEARCH STRATEGY (only apply if totalDirectorships > 1):
+- Search: "${din} mycorporateinfo"
+- Search: "${din} zaubacorp"
+- Combine results but cap at ${totalDirectorships} total entries.
 
 Return the data as a JSON array of objects with these exact keys:
 - company_name: Full official name
 - status: Active, Strike Off, Amalgamated, etc.
-- appointment_date: Format DD/MM/YYYY
+- appointment_date: Format YYYY-MM-DD (CRITICAL: convert from DD/MM/YYYY)
 - industry: Category of business (MANDATORY: infer from name if not found)
 - state: Full Indian state name (MANDATORY: search for registered office location)
 
@@ -509,7 +531,7 @@ Do not include any conversational filler. Return ONLY the JSON array.`
             properties: {
               company_name: { type: Type.STRING },
               status: { type: Type.STRING },
-              appointment_date: { type: Type.STRING },
+              appointment_date: { type: Type.STRING, description: "Date in YYYY-MM-DD format" },
               industry: { type: Type.STRING },
               state: { type: Type.STRING }
             },
@@ -610,8 +632,8 @@ state:
 
 Also extract:
 - status: Current company status (Active, Strike Off, Amalgamated, Dissolved, Under Liquidation)
-- appointmentDate: Date ${directorName} was appointed as director (DD/MM/YYYY)
-- cessationDate: Date ${directorName} ceased as director (DD/MM/YYYY), blank if still active
+- appointmentDate: Date ${directorName} was appointed as director (YYYY-MM-DD)
+- cessationDate: Date ${directorName} ceased as director (YYYY-MM-DD), blank if still active
 
 Return ONLY a JSON object with: status, appointmentDate, cessationDate, industry, state`
             }
@@ -627,8 +649,8 @@ Return ONLY a JSON object with: status, appointmentDate, cessationDate, industry
           type: Type.OBJECT,
           properties: {
             status: { type: Type.STRING },
-            appointmentDate: { type: Type.STRING },
-            cessationDate: { type: Type.STRING },
+            appointmentDate: { type: Type.STRING, description: "Date in YYYY-MM-DD format" },
+            cessationDate: { type: Type.STRING, description: "Date in YYYY-MM-DD format" },
             industry: { type: Type.STRING, description: "Brief profile: specific description of company's business activity, not generic" },
             state: { type: Type.STRING, description: "Full Indian state name of registered office (e.g. Tamil Nadu, Maharashtra, Delhi, not city names)" }
           }

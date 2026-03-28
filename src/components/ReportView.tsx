@@ -33,6 +33,27 @@ export function ReportView({ data, metadata, onDataChange, relatedParties = [] }
     onDataChange({ directors: newDirectors });
   };
 
+  const deleteDirector = (din: string) => {
+    if (!onDataChange) return;
+    const newDirectors = directors.filter(d => d.din !== din);
+    onDataChange({ directors: newDirectors });
+  };
+
+  const addDirector = () => {
+    if (!onDataChange) return;
+    const newDirector: Director = {
+      name: '',
+      din: Math.random().toString(36).substr(2, 9),
+      designation: '',
+      appointmentDate: '',
+      totalDirectorships: 0,
+      otherCompanies: [],
+      disqualified: false,
+      dinDeactivated: false
+    };
+    onDataChange({ directors: [...directors, newDirector] });
+  };
+
   const updateOtherCompany = (directorDin: string, companyId: string, updates: Partial<OtherCompany>) => {
     if (!onDataChange) return;
     const newDirectors = directors.map(d => {
@@ -171,6 +192,32 @@ export function ReportView({ data, metadata, onDataChange, relatedParties = [] }
     onDataChange({ commonDirectorships: [...commonDirectorships, newItem] });
   };
 
+  const updatePotentialRelatedParty = (id: string, updates: Partial<PotentialRelatedParty>) => {
+    if (!onDataChange) return;
+    const newList = (data.potentialRelatedParties || []).map(p => p.id === id ? { ...p, ...updates } : p);
+    onDataChange({ potentialRelatedParties: newList });
+  };
+
+  const deletePotentialRelatedParty = (id: string) => {
+    if (!onDataChange) return;
+    const newList = (data.potentialRelatedParties || []).filter(p => p.id !== id);
+    onDataChange({ potentialRelatedParties: newList });
+  };
+
+  const addPotentialRelatedParty = () => {
+    if (!onDataChange) return;
+    const newItem: PotentialRelatedParty = {
+      id: Math.random().toString(36).substr(2, 9),
+      name: '',
+      status: '',
+      age: '',
+      state: '',
+      commonDirectorsCount: 0,
+      source: 'Manually added'
+    };
+    onDataChange({ potentialRelatedParties: [...(data.potentialRelatedParties || []), newItem] });
+  };
+
   return (
     <div id="report-content" className="bg-white shadow-2xl min-h-[29.7cm] p-[2cm] font-sans text-gray-900 print:shadow-none print:p-0 print-container relative group">
       {/* Edit Mode Indicator */}
@@ -230,25 +277,78 @@ export function ReportView({ data, metadata, onDataChange, relatedParties = [] }
         <section>
           <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-3 text-sm">
             <span className="font-bold">1. Name of the Company:</span>
-            <span>{data.companyName}</span>
+            <span>
+              {onDataChange ? (
+                <input 
+                  className="w-full bg-transparent outline-none focus:bg-gray-100 px-1"
+                  value={data.companyName}
+                  onChange={e => onDataChange({ companyName: e.target.value })}
+                />
+              ) : data.companyName}
+            </span>
             
             <span className="font-bold">2. Corporate Identity Number:</span>
-            <span>{data.cin}</span>
+            <span>
+              {onDataChange ? (
+                <input 
+                  className="w-full bg-transparent outline-none focus:bg-gray-100 px-1"
+                  value={data.cin}
+                  onChange={e => onDataChange({ cin: e.target.value })}
+                />
+              ) : data.cin}
+            </span>
             
             <span className="font-bold">3. Registered Address:</span>
-            <span>{data.registeredAddress}</span>
+            <span>
+              {onDataChange ? (
+                <textarea 
+                  className="w-full bg-transparent outline-none focus:bg-gray-100 px-1 resize-none"
+                  rows={2}
+                  value={data.registeredAddress}
+                  onChange={e => onDataChange({ registeredAddress: e.target.value })}
+                />
+              ) : data.registeredAddress}
+            </span>
             
             <span className="font-bold">4. Status:</span>
-            <span className={cn("font-bold", data.status === 'Active' ? 'text-emerald-600' : 'text-red-600')}>{data.status}</span>
+            <span>
+              {onDataChange ? (
+                <input 
+                  className={cn("font-bold bg-transparent outline-none focus:bg-gray-100 px-1", data.status === 'Active' ? 'text-emerald-600' : 'text-red-600')}
+                  value={data.status}
+                  onChange={e => onDataChange({ status: e.target.value })}
+                />
+              ) : (
+                <span className={cn("font-bold", data.status === 'Active' ? 'text-emerald-600' : 'text-red-600')}>{data.status}</span>
+              )}
+            </span>
             
             <span className="font-bold">5. Date of Incorporation:</span>
-            <span>{data.incorporationDate}</span>
+            <span>
+              {onDataChange ? (
+                <input 
+                  className="w-full bg-transparent outline-none focus:bg-gray-100 px-1"
+                  value={data.incorporationDate}
+                  onChange={e => onDataChange({ incorporationDate: e.target.value })}
+                />
+              ) : data.incorporationDate}
+            </span>
           </div>
         </section>
 
         {/* Directors Table */}
         <section>
-          <h3 className="text-sm font-bold mb-4">6. Directors/Signatory Details</h3>
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-bold">6. Directors/Signatory Details</h3>
+            {onDataChange && (
+              <button 
+                onClick={addDirector}
+                className="text-[10px] bg-navy text-white px-2 py-1 rounded hover:bg-navy/90 transition-colors print:hidden"
+              >
+                + Add Director
+              </button>
+            )}
+          </div>
           <table className="w-full border-collapse text-xs">
             <thead>
               <tr className="bg-navy text-white">
@@ -258,6 +358,7 @@ export function ReportView({ data, metadata, onDataChange, relatedParties = [] }
                 <th className="border border-navy p-2 text-left">Designation</th>
                 <th className="border border-navy p-2 text-left">Appointment Date</th>
                 <th className="border border-navy p-2 text-left">Total Directorships</th>
+                {onDataChange && <th className="border border-navy p-2 text-center w-12 print:hidden">Actions</th>}
               </tr>
             </thead>
             <tbody>
@@ -265,10 +366,42 @@ export function ReportView({ data, metadata, onDataChange, relatedParties = [] }
                 directors.map((d, i) => (
                   <tr key={d.din || `dir-${i}`} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                     <td className="border border-gray-200 p-2">{i + 1}</td>
-                    <td className="border border-gray-200 p-2 font-bold">{d.name}</td>
-                    <td className="border border-gray-200 p-2">{d.din}</td>
-                    <td className="border border-gray-200 p-2">{d.designation}</td>
-                    <td className="border border-gray-200 p-2">{d.appointmentDate}</td>
+                    <td className="border border-gray-200 p-2 font-bold">
+                      {onDataChange ? (
+                        <input 
+                          className="w-full bg-transparent outline-none focus:bg-white font-bold"
+                          value={d.name}
+                          onChange={e => updateDirector(d.din, { name: e.target.value })}
+                        />
+                      ) : d.name}
+                    </td>
+                    <td className="border border-gray-200 p-2">
+                      {onDataChange ? (
+                        <input 
+                          className="w-full bg-transparent outline-none focus:bg-white"
+                          value={d.din}
+                          onChange={e => updateDirector(d.din, { din: e.target.value })}
+                        />
+                      ) : d.din}
+                    </td>
+                    <td className="border border-gray-200 p-2">
+                      {onDataChange ? (
+                        <input 
+                          className="w-full bg-transparent outline-none focus:bg-white"
+                          value={d.designation}
+                          onChange={e => updateDirector(d.din, { designation: e.target.value })}
+                        />
+                      ) : d.designation}
+                    </td>
+                    <td className="border border-gray-200 p-2">
+                      {onDataChange ? (
+                        <input 
+                          className="w-full bg-transparent outline-none focus:bg-white"
+                          value={d.appointmentDate}
+                          onChange={e => updateDirector(d.din, { appointmentDate: e.target.value })}
+                        />
+                      ) : d.appointmentDate}
+                    </td>
                     <td className="border border-gray-200 p-2 text-center">
                       {onDataChange ? (
                         <input 
@@ -279,11 +412,18 @@ export function ReportView({ data, metadata, onDataChange, relatedParties = [] }
                         />
                       ) : d.totalDirectorships}
                     </td>
+                    {onDataChange && (
+                      <td className="border border-gray-200 p-2 text-center print:hidden">
+                        <button onClick={() => deleteDirector(d.din)} className="text-red-500 hover:text-red-700">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))
               ) : (
                 <tr key="no-directors">
-                  <td colSpan={6} className="border border-gray-200 p-4 text-center text-gray-400 italic">No director data available</td>
+                  <td colSpan={onDataChange ? 7 : 6} className="border border-gray-200 p-4 text-center text-gray-400 italic">No director data available</td>
                 </tr>
               )}
             </tbody>
@@ -296,11 +436,49 @@ export function ReportView({ data, metadata, onDataChange, relatedParties = [] }
           <div className="space-y-4 text-sm">
             <div>
               <p className="font-bold">Authorised Capital:</p>
-              <p>{formatCurrency(data.authorizedCapital)} ({data.authorizedCapitalWords})</p>
+              {onDataChange ? (
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-gray-400">Rs.</span>
+                    <input 
+                      type="number"
+                      className="font-bold bg-transparent outline-none focus:bg-gray-100 px-1"
+                      value={data.authorizedCapital}
+                      onChange={e => onDataChange({ authorizedCapital: Number(e.target.value) })}
+                    />
+                  </div>
+                  <input 
+                    className="w-full text-xs bg-transparent outline-none focus:bg-gray-100 px-1 italic"
+                    value={data.authorizedCapitalWords}
+                    onChange={e => onDataChange({ authorizedCapitalWords: e.target.value })}
+                  />
+                </div>
+              ) : (
+                <p>{formatCurrency(data.authorizedCapital)} ({data.authorizedCapitalWords})</p>
+              )}
             </div>
             <div>
               <p className="font-bold">Paid Up Capital:</p>
-              <p>{formatCurrency(data.paidUpCapital)} ({data.paidUpCapitalWords})</p>
+              {onDataChange ? (
+                <div className="flex flex-col gap-1">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-gray-400">Rs.</span>
+                    <input 
+                      type="number"
+                      className="font-bold bg-transparent outline-none focus:bg-gray-100 px-1"
+                      value={data.paidUpCapital}
+                      onChange={e => onDataChange({ paidUpCapital: Number(e.target.value) })}
+                    />
+                  </div>
+                  <input 
+                    className="w-full text-xs bg-transparent outline-none focus:bg-gray-100 px-1 italic"
+                    value={data.paidUpCapitalWords}
+                    onChange={e => onDataChange({ paidUpCapitalWords: e.target.value })}
+                  />
+                </div>
+              ) : (
+                <p>{formatCurrency(data.paidUpCapital)} ({data.paidUpCapitalWords})</p>
+              )}
             </div>
           </div>
         </section>
@@ -747,206 +925,20 @@ export function ReportView({ data, metadata, onDataChange, relatedParties = [] }
           </div>
         </section>
 
-        {/* Related Parties */}
-        <section>
-          <h3 className="text-sm font-bold mb-4">12. Potential Related Parties</h3>
-          
-          <div className="space-y-8">
-            {/* Table A: Associate / Subsidiary */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="text-xs font-bold text-navy uppercase">A. Associate / Subsidiary Companies (as per MGT-7)</h4>
-                {onDataChange && (
-                  <button 
-                    onClick={addAssociateSubsidiary}
-                    className="flex items-center gap-1 text-[10px] font-bold text-navy hover:text-navy/70 transition-colors print:hidden"
-                  >
-                    <Plus className="w-3 h-3" />
-                    Add Row
-                  </button>
-                )}
-              </div>
-              <table className="w-full border-collapse text-[10px]">
-                <thead>
-                  <tr className="bg-navy text-white">
-                    <th className="border border-navy p-1.5 text-left w-8">S.No</th>
-                    <th className="border border-navy p-1.5 text-left">CIN/FCRN</th>
-                    <th className="border border-navy p-1.5 text-left">Name of Company</th>
-                    <th className="border border-navy p-1.5 text-left">Nature (Holding/Subsidiary/Associate/JV)</th>
-                    <th className="border border-navy p-1.5 text-left">% of Shares Held</th>
-                    {onDataChange && <th className="border border-navy p-1.5 text-center w-8 print:hidden"></th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {associateSubsidiaries.length > 0 ? (
-                    associateSubsidiaries.map((a, i) => (
-                      <tr key={a.id || `as-${i}`} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                        <td className="border border-gray-200 p-1.5 text-center">{i + 1}</td>
-                        <td className="border border-gray-200 p-1.5">
-                          {onDataChange ? (
-                            <input 
-                              className="w-full bg-transparent outline-none focus:bg-white"
-                              value={a.cin}
-                              onChange={e => updateAssociateSubsidiary(a.id, { cin: e.target.value })}
-                            />
-                          ) : a.cin}
-                        </td>
-                        <td className="border border-gray-200 p-1.5 font-bold">
-                          {onDataChange ? (
-                            <input 
-                              className="w-full bg-transparent outline-none focus:bg-white"
-                              value={a.name}
-                              onChange={e => updateAssociateSubsidiary(a.id, { name: e.target.value })}
-                            />
-                          ) : a.name}
-                        </td>
-                        <td className="border border-gray-200 p-1.5">
-                          {onDataChange ? (
-                            <input 
-                              className="w-full bg-transparent outline-none focus:bg-white"
-                              value={a.nature}
-                              onChange={e => updateAssociateSubsidiary(a.id, { nature: e.target.value })}
-                            />
-                          ) : a.nature}
-                        </td>
-                        <td className="border border-gray-200 p-1.5 text-center">
-                          {onDataChange ? (
-                            <input 
-                              className="w-full bg-transparent outline-none focus:bg-white text-center"
-                              value={a.sharesHeld}
-                              onChange={e => updateAssociateSubsidiary(a.id, { sharesHeld: e.target.value })}
-                            />
-                          ) : a.sharesHeld}
-                        </td>
-                        {onDataChange && (
-                          <td className="border border-gray-200 p-1.5 text-center print:hidden">
-                            <button 
-                              onClick={() => deleteAssociateSubsidiary(a.id)}
-                              className="text-red-400 hover:text-red-600 transition-colors"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          </td>
-                        )}
-                      </tr>
-                    ))
-                  ) : (
-                    <tr key="no-associate">
-                      <td colSpan={onDataChange ? 6 : 5} className="border border-gray-200 p-4 text-center text-gray-400 italic">
-                        No data found in MGT-7 — please verify manually
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Table B: Common Directorship */}
-            <div>
-              <div className="flex items-center justify-between mb-2">
-                <h4 className="text-xs font-bold text-navy uppercase">B. Companies with Common Directorship</h4>
-                {onDataChange && (
-                  <button 
-                    onClick={addCommonDirectorship}
-                    className="flex items-center gap-1 text-[10px] font-bold text-navy hover:text-navy/70 transition-colors print:hidden"
-                  >
-                    <Plus className="w-3 h-3" />
-                    Add Row
-                  </button>
-                )}
-              </div>
-              <table className="w-full border-collapse text-[10px]">
-                <thead>
-                  <tr className="bg-navy text-white">
-                    <th className="border border-navy p-1.5 text-left w-8">S.No</th>
-                    <th className="border border-navy p-1.5 text-left">Company Name</th>
-                    <th className="border border-navy p-1.5 text-left">Status</th>
-                    <th className="border border-navy p-1.5 text-left">Age</th>
-                    <th className="border border-navy p-1.5 text-left">State</th>
-                    <th className="border border-navy p-1.5 text-left">No. of Common Directors</th>
-                    {onDataChange && <th className="border border-navy p-1.5 text-center w-8 print:hidden"></th>}
-                  </tr>
-                </thead>
-                <tbody>
-                  {commonDirectorships.length > 0 ? (
-                    commonDirectorships.map((cd, i) => (
-                      <tr key={cd.id || `cd-${i}`} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                        <td className="border border-gray-200 p-1.5 text-center">{i + 1}</td>
-                        <td className="border border-gray-200 p-1.5 font-bold">
-                          {onDataChange ? (
-                            <input 
-                              className="w-full bg-transparent outline-none focus:bg-white"
-                              value={cd.name}
-                              onChange={e => updateCommonDirectorship(cd.id, { name: e.target.value })}
-                            />
-                          ) : cd.name}
-                        </td>
-                        <td className="border border-gray-200 p-1.5">
-                          {onDataChange ? (
-                            <input 
-                              className="w-full bg-transparent outline-none focus:bg-white"
-                              value={cd.status}
-                              onChange={e => updateCommonDirectorship(cd.id, { status: e.target.value })}
-                            />
-                          ) : cd.status}
-                        </td>
-                        <td className="border border-gray-200 p-1.5">
-                          {onDataChange ? (
-                            <input 
-                              className="w-full bg-transparent outline-none focus:bg-white"
-                              value={cd.age}
-                              onChange={e => updateCommonDirectorship(cd.id, { age: e.target.value })}
-                            />
-                          ) : cd.age}
-                        </td>
-                        <td className="border border-gray-200 p-1.5">
-                          {onDataChange ? (
-                            <input 
-                              className="w-full bg-transparent outline-none focus:bg-white"
-                              value={cd.state}
-                              onChange={e => updateCommonDirectorship(cd.id, { state: e.target.value })}
-                            />
-                          ) : cd.state}
-                        </td>
-                        <td className="border border-gray-200 p-1.5 text-center font-bold">
-                          {onDataChange ? (
-                            <input 
-                              type="number"
-                              className="w-full bg-transparent outline-none focus:bg-white text-center"
-                              value={cd.commonDirectorsCount}
-                              onChange={e => updateCommonDirectorship(cd.id, { commonDirectorsCount: Number(e.target.value) })}
-                            />
-                          ) : cd.commonDirectorsCount}
-                        </td>
-                        {onDataChange && (
-                          <td className="border border-gray-200 p-1.5 text-center print:hidden">
-                            <button 
-                              onClick={() => deleteCommonDirectorship(cd.id)}
-                              className="text-red-400 hover:text-red-600 transition-colors"
-                            >
-                              <Trash2 className="w-3 h-3" />
-                            </button>
-                          </td>
-                        )}
-                      </tr>
-                    ))
-                  ) : (
-                    <tr key="no-common">
-                      <td colSpan={onDataChange ? 7 : 6} className="border border-gray-200 p-4 text-center text-gray-400 italic">
-                        No common directorships identified — please verify manually
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </section>
-
         {/* Potential Related Parties (Appended from Sidebar) */}
-        {relatedParties.length > 0 && (
+        {(data.potentialRelatedParties || []).length > 0 && (
           <section>
-            <h3 className="text-sm font-bold mb-4">13. Potential Related Parties</h3>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-sm font-bold">12. Potential Related Parties</h3>
+              {onDataChange && (
+                <button 
+                  onClick={addPotentialRelatedParty}
+                  className="text-[10px] bg-navy text-white px-2 py-1 rounded hover:bg-navy/90 transition-colors print:hidden"
+                >
+                  + Add Row
+                </button>
+              )}
+            </div>
             <div className="border border-gray-200 rounded-sm overflow-hidden">
               <table className="w-full border-collapse text-[10px]">
                 <thead>
@@ -957,17 +949,66 @@ export function ReportView({ data, metadata, onDataChange, relatedParties = [] }
                     <th className="border border-navy p-1.5 text-left">Age of Company (Years)</th>
                     <th className="border border-navy p-1.5 text-left">State</th>
                     <th className="border border-navy p-1.5 text-center w-40">No. of Common Directors</th>
+                    {onDataChange && <th className="border border-navy p-1.5 text-center w-8 print:hidden"></th>}
                   </tr>
                 </thead>
                 <tbody>
-                  {relatedParties.map((rp, i) => (
+                  {(data.potentialRelatedParties || []).map((rp, i) => (
                     <tr key={rp.id || `rp-${i}`} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
                       <td className="border border-gray-200 p-1.5 text-center">{i + 1}</td>
-                      <td className="border border-gray-200 p-1.5 font-bold">{rp.name}</td>
-                      <td className="border border-gray-200 p-1.5">{rp.status}</td>
-                      <td className="border border-gray-200 p-1.5">{rp.age}</td>
-                      <td className="border border-gray-200 p-1.5">{rp.state}</td>
-                      <td className="border border-gray-200 p-1.5 text-center font-bold">{rp.commonDirectorsCount}</td>
+                      <td className="border border-gray-200 p-1.5 font-bold">
+                        {onDataChange ? (
+                          <input 
+                            className="w-full bg-transparent outline-none focus:bg-white font-bold"
+                            value={rp.name}
+                            onChange={e => updatePotentialRelatedParty(rp.id, { name: e.target.value })}
+                          />
+                        ) : rp.name}
+                      </td>
+                      <td className="border border-gray-200 p-1.5">
+                        {onDataChange ? (
+                          <input 
+                            className="w-full bg-transparent outline-none focus:bg-white"
+                            value={rp.status}
+                            onChange={e => updatePotentialRelatedParty(rp.id, { status: e.target.value })}
+                          />
+                        ) : rp.status}
+                      </td>
+                      <td className="border border-gray-200 p-1.5">
+                        {onDataChange ? (
+                          <input 
+                            className="w-full bg-transparent outline-none focus:bg-white"
+                            value={rp.age}
+                            onChange={e => updatePotentialRelatedParty(rp.id, { age: e.target.value })}
+                          />
+                        ) : rp.age}
+                      </td>
+                      <td className="border border-gray-200 p-1.5">
+                        {onDataChange ? (
+                          <input 
+                            className="w-full bg-transparent outline-none focus:bg-white"
+                            value={rp.state}
+                            onChange={e => updatePotentialRelatedParty(rp.id, { state: e.target.value })}
+                          />
+                        ) : rp.state}
+                      </td>
+                      <td className="border border-gray-200 p-1.5 text-center font-bold">
+                        {onDataChange ? (
+                          <input 
+                            type="number"
+                            className="w-full bg-transparent outline-none focus:bg-white text-center font-bold"
+                            value={rp.commonDirectorsCount}
+                            onChange={e => updatePotentialRelatedParty(rp.id, { commonDirectorsCount: Number(e.target.value) })}
+                          />
+                        ) : rp.commonDirectorsCount}
+                      </td>
+                      {onDataChange && (
+                        <td className="border border-gray-200 p-1.5 text-center print:hidden">
+                          <button onClick={() => deletePotentialRelatedParty(rp.id)} className="text-red-500 hover:text-red-700">
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
