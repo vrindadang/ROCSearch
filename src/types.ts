@@ -123,3 +123,11 @@ export interface FileStatus {
   status: 'pending' | 'parsing' | 'success' | 'partial' | 'blank-xfa' | 'error';
   error?: string;
 }
+
+export interface UserAccount {
+  id: string;
+  username: string;
+  password: string;
+  role: 'admin' | 'user';
+  createdAt: string;
+}

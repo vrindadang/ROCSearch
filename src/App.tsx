@@ -2,8 +2,10 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Sidebar } from './components/Sidebar';
 import { ReportView } from './components/ReportView';
 import { TopBar } from './components/TopBar';
+import { LoginPage } from './components/LoginPage';
+import { UserManagementModal } from './components/UserManagementModal';
 import { ManualChargeModal } from './components/ManualChargeModal';
-import { CompanyData, ReportMetadata, FileStatus, Charge, UploadLog, Director, OtherCompany, CommonDirectorship, AssociateSubsidiary, PotentialRelatedParty } from './types';
+import { CompanyData, ReportMetadata, FileStatus, Charge, UploadLog, Director, OtherCompany, CommonDirectorship, AssociateSubsidiary, PotentialRelatedParty, UserAccount } from './types';
 import { extractTextFromFile } from './utils/parsers';
 import { parseCompanyFiles, fetchOtherDirectorships, fetchCompanyDetails } from './utils/gemini';
 import { numberToWords } from './utils/formatters';
@@ -57,6 +59,65 @@ export default function App() {
   const [pendingRelatedParties, setPendingRelatedParties] = useState<PotentialRelatedParty[]>([]);
   const [approvedRelatedParties, setApprovedRelatedParties] = useState<PotentialRelatedParty[]>([]);
   const [isRelatedPartiesAppended, setIsRelatedPartiesAppended] = useState(false);
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    return localStorage.getItem('is_authenticated') === 'true';
+  });
+  const [user, setUser] = useState<string | null>(() => {
+    return localStorage.getItem('auth_user');
+  });
+  const [users, setUsers] = useState<UserAccount[]>(() => {
+    const stored = localStorage.getItem('app_users');
+    if (stored) {
+      try {
+        return JSON.parse(stored);
+      } catch (e) {
+        console.error('Failed to parse stored users', e);
+      }
+    }
+    return [
+      { id: '1', username: 'admin', password: 'password123', role: 'admin', createdAt: new Date().toISOString() },
+      { id: '2', username: 'user', password: 'password123', role: 'user', createdAt: new Date().toISOString() }
+    ];
+  });
+  const [isUserModalOpen, setIsUserModalOpen] = useState(false);
+
+  const handleLogin = (username: string) => {
+    setIsAuthenticated(true);
+    setUser(username);
+    localStorage.setItem('is_authenticated', 'true');
+    localStorage.setItem('auth_user', username);
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    setUser(null);
+    localStorage.removeItem('is_authenticated');
+    localStorage.removeItem('auth_user');
+  };
+
+  const handleSaveUser = (userData: Partial<UserAccount>) => {
+    let updatedUsers: UserAccount[];
+    if (userData.id) {
+      updatedUsers = users.map(u => u.id === userData.id ? { ...u, ...userData } as UserAccount : u);
+    } else {
+      const newUser: UserAccount = {
+        id: Math.random().toString(36).substr(2, 9),
+        username: userData.username!,
+        password: userData.password!,
+        role: userData.role || 'user',
+        createdAt: new Date().toISOString()
+      };
+      updatedUsers = [...users, newUser];
+    }
+    setUsers(updatedUsers);
+    localStorage.setItem('app_users', JSON.stringify(updatedUsers));
+  };
+
+  const handleDeleteUser = (id: string) => {
+    const updatedUsers = users.filter(u => u.id !== id);
+    setUsers(updatedUsers);
+    localStorage.setItem('app_users', JSON.stringify(updatedUsers));
+  };
 
   const addLog = (fileName: string, message: string, type: UploadLog['type'] = 'success') => {
     setUploadLogs(prev => [{
@@ -514,6 +575,10 @@ export default function App() {
     setPendingRelatedParties(relatedParties);
   }, [companyData.directors]);
 
+  if (!isAuthenticated) {
+    return <LoginPage onLogin={handleLogin} />;
+  }
+
   return (
     <div className="flex flex-col h-screen bg-gray-100 overflow-hidden">
       <TopBar 
@@ -521,6 +586,18 @@ export default function App() {
         onMetadataChange={setMetadata} 
         onGenerate={handlePrint} 
         onExportWord={handleExportWord}
+        onLogout={handleLogout}
+        onManageUsers={() => setIsUserModalOpen(true)}
+        user={user || ''}
+        isAdmin={user === 'admin' || users.find(u => u.username === user)?.role === 'admin'}
+      />
+
+      <UserManagementModal
+        isOpen={isUserModalOpen}
+        onClose={() => setIsUserModalOpen(false)}
+        users={users}
+        onSaveUser={handleSaveUser}
+        onDeleteUser={handleDeleteUser}
       />
       
       <div className="flex flex-1 overflow-hidden">
