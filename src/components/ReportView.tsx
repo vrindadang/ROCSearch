@@ -866,110 +866,7 @@ export function ReportView({ data, metadata, onDataChange, relatedParties = [] }
             </tbody>
           </table>
 
-          <h3 className="text-sm font-bold mb-4">11. List of Satisfied Charges</h3>
-          <table className="w-full border-collapse text-xs mb-8">
-            <thead>
-              <tr className="bg-navy text-white">
-                <th className="border border-navy p-2 text-left w-12">Sl.No</th>
-                <th className="border border-navy p-2 text-left">Charge ID</th>
-                <th className="border border-navy p-2 text-left">Charge Holder Name</th>
-                <th className="border border-navy p-2 text-left">Amount (In Rupees)</th>
-                <th className="border border-navy p-2 text-left">Date of Creation</th>
-                <th className="border border-navy p-2 text-left">Date of Last Modification</th>
-                <th className="border border-navy p-2 text-left">Date of Satisfaction</th>
-                <th className="border border-navy p-2 text-left">Outstanding Years</th>
-                {onDataChange && <th className="border border-navy p-2 text-center w-12 print:hidden">Actions</th>}
-              </tr>
-            </thead>
-            <tbody>
-              {satisfiedCharges.length > 0 ? (
-                satisfiedCharges.map((c, i) => (
-                  <tr key={c.id || `satisfied-${i}`} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
-                    <td className="border border-gray-200 p-2">{i + 1}</td>
-                    <td className="border border-gray-200 p-2 font-bold">
-                      {onDataChange ? (
-                        <input 
-                          className="w-full bg-transparent outline-none focus:bg-white"
-                          value={c.id}
-                          onChange={e => updateCharge(c.id, { id: e.target.value })}
-                        />
-                      ) : c.id}
-                    </td>
-                    <td className="border border-gray-200 p-2">
-                      {onDataChange ? (
-                        <input 
-                          className="w-full bg-transparent outline-none focus:bg-white"
-                          value={c.bankName}
-                          onChange={e => updateCharge(c.id, { bankName: e.target.value })}
-                        />
-                      ) : c.bankName}
-                    </td>
-                    <td className="border border-gray-200 p-2">
-                      {onDataChange ? (
-                        <input 
-                          type="number"
-                          className="w-full bg-transparent outline-none focus:bg-white"
-                          value={c.modifiedAmountSecured && c.modifiedAmountSecured > 0 ? c.modifiedAmountSecured : c.amountSecured}
-                          onChange={e => {
-                            const val = Number(e.target.value);
-                            if (c.modifiedAmountSecured && c.modifiedAmountSecured > 0) {
-                              updateCharge(c.id, { modifiedAmountSecured: val });
-                            } else {
-                              updateCharge(c.id, { amountSecured: val });
-                            }
-                          }}
-                        />
-                      ) : formatCurrency(c.modifiedAmountSecured && c.modifiedAmountSecured > 0 ? c.modifiedAmountSecured : c.amountSecured)}
-                    </td>
-                    <td className="border border-gray-200 p-2">
-                      {onDataChange ? (
-                        <input 
-                          className="w-full bg-transparent outline-none focus:bg-white"
-                          value={c.creationDate}
-                          onChange={e => updateCharge(c.id, { creationDate: e.target.value })}
-                        />
-                      ) : formatDate(c.creationDate)}
-                    </td>
-                    <td className="border border-gray-200 p-2">
-                      {onDataChange ? (
-                        <input 
-                          className="w-full bg-transparent outline-none focus:bg-white"
-                          value={c.modificationDate || ''}
-                          onChange={e => updateCharge(c.id, { modificationDate: e.target.value })}
-                          placeholder="N/A"
-                        />
-                      ) : (c.modificationDate && c.modificationDate !== 'N/A' ? formatDate(c.modificationDate) : "N/A")}
-                    </td>
-                    <td className="border border-gray-200 p-2">
-                      {onDataChange ? (
-                        <input 
-                          className="w-full bg-transparent outline-none focus:bg-white"
-                          value={c.satisfactionDate || ''}
-                          onChange={e => updateCharge(c.id, { satisfactionDate: e.target.value })}
-                        />
-                      ) : formatDate(c.satisfactionDate)}
-                    </td>
-                    <td className="border border-gray-200 p-2 font-medium text-navy">
-                      {calculateOutstandingYears(c.creationDate, c.satisfactionDate)}
-                    </td>
-                    {onDataChange && (
-                      <td className="border border-gray-200 p-2 text-center print:hidden">
-                        <button onClick={() => deleteCharge(c.id)} className="text-red-500 hover:text-red-700">
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                        </button>
-                      </td>
-                    )}
-                  </tr>
-                ))
-              ) : (
-                <tr key="no-satisfied-charges">
-                  <td colSpan={onDataChange ? 9 : 8} className="border border-gray-200 p-4 text-center text-gray-400 italic">No satisfied charge data available</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-
-          <h3 className="text-sm font-bold mb-4">12. Particulars of Continuing Charges</h3>
+          <h3 className="text-sm font-bold mb-4">11. Particulars of Charges</h3>
           <div className="space-y-8 mb-12">
             {openCharges.map((c, i) => (
               <div key={c.id || `charge-block-${i}`} className="break-inside-avoid relative group">
@@ -1074,7 +971,91 @@ export function ReportView({ data, metadata, onDataChange, relatedParties = [] }
             ))}
           </div>
 
-          <h3 className="text-sm font-bold mb-4 mt-12">13. Particulars of Satisfied Charges</h3>
+          {/* Satisfied Charges Summary */}
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-bold">12. List of Satisfied Charges</h3>
+          </div>
+          <table className="w-full border-collapse text-xs mb-8">
+            <thead>
+              <tr className="bg-navy text-white">
+                <th className="border border-navy p-2 text-left w-12">Sl.No</th>
+                <th className="border border-navy p-2 text-left">Charge ID</th>
+                <th className="border border-navy p-2 text-left">Charge Holder Name</th>
+                <th className="border border-navy p-2 text-left">Amount (In Rupees)</th>
+                <th className="border border-navy p-2 text-left">Date of Creation</th>
+                <th className="border border-navy p-2 text-left">Date of Satisfaction</th>
+                {onDataChange && <th className="border border-navy p-2 text-center w-12 print:hidden">Actions</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {satisfiedCharges.length > 0 ? (
+                satisfiedCharges.map((c, i) => (
+                  <tr key={c.id || `satisfied-${i}`} className={i % 2 === 0 ? 'bg-white' : 'bg-gray-50'}>
+                    <td className="border border-gray-200 p-2">{i + 1}</td>
+                    <td className="border border-gray-200 p-2 font-bold">
+                      {onDataChange ? (
+                        <input 
+                          className="w-full bg-transparent outline-none focus:bg-white"
+                          value={c.id}
+                          onChange={e => updateCharge(c.id, { id: e.target.value })}
+                        />
+                      ) : c.id}
+                    </td>
+                    <td className="border border-gray-200 p-2">
+                      {onDataChange ? (
+                        <input 
+                          className="w-full bg-transparent outline-none focus:bg-white"
+                          value={c.bankName}
+                          onChange={e => updateCharge(c.id, { bankName: e.target.value })}
+                        />
+                      ) : c.bankName}
+                    </td>
+                    <td className="border border-gray-200 p-2">
+                      {onDataChange ? (
+                        <input 
+                          type="number"
+                          className="w-full bg-transparent outline-none focus:bg-white"
+                          value={c.amountSecured}
+                          onChange={e => updateCharge(c.id, { amountSecured: Number(e.target.value) })}
+                        />
+                      ) : formatCurrency(c.amountSecured)}
+                    </td>
+                    <td className="border border-gray-200 p-2">
+                      {onDataChange ? (
+                        <input 
+                          className="w-full bg-transparent outline-none focus:bg-white"
+                          value={c.creationDate}
+                          onChange={e => updateCharge(c.id, { creationDate: e.target.value })}
+                        />
+                      ) : formatDate(c.creationDate)}
+                    </td>
+                    <td className="border border-gray-200 p-2 font-bold text-emerald-600">
+                      {onDataChange ? (
+                        <input 
+                          className="w-full bg-transparent outline-none focus:bg-white font-bold text-emerald-600"
+                          value={c.satisfactionDate || ''}
+                          onChange={e => updateCharge(c.id, { satisfactionDate: e.target.value })}
+                        />
+                      ) : formatDate(c.satisfactionDate)}
+                    </td>
+                    {onDataChange && (
+                      <td className="border border-gray-200 p-2 text-center print:hidden">
+                        <button onClick={() => deleteCharge(c.id)} className="text-red-500 hover:text-red-700">
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                ))
+              ) : (
+                <tr key="no-satisfied-charges">
+                  <td colSpan={onDataChange ? 7 : 6} className="border border-gray-200 p-4 text-center text-gray-400 italic">No satisfied charge data available</td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+
+          <h3 className="text-sm font-bold mb-4">13. Particulars of Satisfied Charges</h3>
           <div className="space-y-8">
             {satisfiedCharges.map((c, i) => (
               <div key={c.id || `satisfied-block-${i}`} className="break-inside-avoid relative group">
@@ -1082,11 +1063,10 @@ export function ReportView({ data, metadata, onDataChange, relatedParties = [] }
                   <div className="flex items-center justify-between mb-1">
                     <h4 className="text-xs font-bold text-navy">
                       {i + 1}. Charge Created on {formatDate(c.creationDate)} and Satisfied on {formatDate(c.satisfactionDate)} vide charge ID number {c.id || '[ID]'}
-                      {c.isManual && <span className="ml-2 px-1.5 py-0.5 bg-[rgba(26,39,68,0.1)] text-navy text-[8px] rounded uppercase">Manually entered</span>}
                     </h4>
                     {onDataChange && (
                       <button onClick={() => deleteCharge(c.id)} className="text-red-500 hover:text-red-700 transition-colors print:hidden">
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                        <Trash2 className="w-3 h-3" />
                       </button>
                     )}
                   </div>
@@ -1095,7 +1075,6 @@ export function ReportView({ data, metadata, onDataChange, relatedParties = [] }
                     <ChargeDetail 
                       label="1. Name & Address of the Person/Institution In Whose favor Charge is Created" 
                       value={`${c.bankName || 'Not Available'}${c.bankAddress ? `\n${c.bankAddress}` : '\nAddress not available in records'}`} 
-                      metadata={c.needsVerification ? { needsVerification: true, message: c.verificationMessage || '' } : undefined}
                       onChange={v => {
                         const parts = v.split('\n');
                         updateCharge(c.id, { bankName: parts[0], bankAddress: parts.slice(1).join('\n') });
@@ -1104,7 +1083,6 @@ export function ReportView({ data, metadata, onDataChange, relatedParties = [] }
                     <ChargeDetail 
                       label="2. Amount Secured By the Charge" 
                       value={`Rs. ${formatCurrency(c.amountSecured)}\n(${c.amountInWords || 'Amount in words not available'})`} 
-                      metadata={c.needsVerification ? { needsVerification: true, message: c.verificationMessage || '' } : undefined}
                       onChange={v => {
                         const parts = v.split('\n');
                         const match = parts[0].match(/[\d,]+/);
@@ -1115,44 +1093,42 @@ export function ReportView({ data, metadata, onDataChange, relatedParties = [] }
                       }}
                     />
                     <ChargeDetail 
-                      label="3. Brief Particulars Of the Property Charged" 
+                      label="3. Date of Satisfaction" 
+                      value={formatDate(c.satisfactionDate) || "Not Available"} 
+                      onChange={v => updateCharge(c.id, { satisfactionDate: v })}
+                    />
+                    <ChargeDetail 
+                      label="4. Brief Particulars Of the Property Charged" 
                       value={c.propertyCharged || "Not Available"} 
-                      metadata={c.needsVerification ? { needsVerification: true, message: c.verificationMessage || '' } : undefined}
                       onChange={v => updateCharge(c.id, { propertyCharged: v, isDetailed: true })}
                     />
                     <ChargeDetail 
-                      label="4. Terms and Conditions" 
+                      label="5. Terms and Conditions" 
                       value={c.termsAndConditions || "Not Available"} 
-                      metadata={c.needsVerification ? { needsVerification: true, message: c.verificationMessage || '' } : undefined}
                       onChange={v => updateCharge(c.id, { termsAndConditions: v, isDetailed: true })}
                     />
                     <ChargeDetail 
-                      label="5. Margin" 
+                      label="6. Margin" 
                       value={c.margin || "Not Available"} 
-                      metadata={c.needsVerification ? { needsVerification: true, message: c.verificationMessage || '' } : undefined}
                       onChange={v => updateCharge(c.id, { margin: v, isDetailed: true })}
                     />
                     <ChargeDetail 
-                      label="6. Terms of repayment" 
+                      label="7. Terms of repayment" 
                       value={c.repaymentTerms || "Not Available"} 
-                      metadata={c.needsVerification ? { needsVerification: true, message: c.verificationMessage || '' } : undefined}
                       onChange={v => updateCharge(c.id, { repaymentTerms: v, isDetailed: true })}
                     />
                     <ChargeDetail 
-                      label="7. Extent and operation of the charge" 
+                      label="8. Extent and operation of the charge" 
                       value={c.extentOfCharge || "Not Available"} 
-                      metadata={c.needsVerification ? { needsVerification: true, message: c.verificationMessage || '' } : undefined}
                       onChange={v => updateCharge(c.id, { extentOfCharge: v, isDetailed: true })}
-                    />
-                    <ChargeDetail 
-                      label="8. Date of Satisfaction" 
-                      value={formatDate(c.satisfactionDate || '')} 
-                      onChange={v => updateCharge(c.id, { satisfactionDate: v })} 
                     />
                   </div>
                 </div>
               </div>
             ))}
+            {satisfiedCharges.length === 0 && (
+              <p className="text-xs text-gray-400 italic">No satisfied charges to display.</p>
+            )}
           </div>
         </section>
 

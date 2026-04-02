@@ -210,14 +210,16 @@ export function Sidebar({
                             </div>
                           )}
                           {file.status === 'error' && (
-                            <div className="flex flex-col gap-1 mt-1">
+                            <div className="flex flex-col gap-1.5 mt-1">
                               <div className="flex items-center gap-1.5">
                                 <XCircle className="w-3 h-3 text-red-500" />
                                 <span className="text-xs text-red-600 font-semibold">❌ Failed</span>
                               </div>
-                              <p className="text-[10px] text-red-500 leading-tight bg-red-50 p-1.5 rounded border border-red-100">
-                                {file.error || 'Could not read file'}
-                              </p>
+                              {file.error && (
+                                <div className="p-2 bg-red-50 border border-red-100 rounded text-[10px] text-red-800 leading-tight">
+                                  {file.error}
+                                </div>
+                              )}
                             </div>
                           )}
                         </div>
