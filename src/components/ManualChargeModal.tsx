@@ -192,28 +192,13 @@ export function ManualChargeModal({ isOpen, onClose, onSave }: ManualChargeModal
 
           <div className="flex flex-col gap-1">
             <label className="text-xs font-bold text-gray-500 uppercase">Status</label>
-            <select 
-              value={charge.status}
-              onChange={e => setCharge({ ...charge, status: e.target.value as any })}
-              className="px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[rgba(26,39,68,0.2)] focus:border-navy outline-none"
-            >
-              <option value="Open">Open/Continuing</option>
-              <option value="Satisfied">Satisfied/Closed</option>
-            </select>
+            <input 
+              type="text"
+              value="Open/Continuing"
+              disabled
+              className="px-3 py-2 border border-gray-100 rounded-lg bg-gray-50 text-gray-500 outline-none cursor-not-allowed"
+            />
           </div>
-
-          {charge.status === 'Satisfied' && (
-            <div className="flex flex-col gap-1">
-              <label className="text-xs font-bold text-gray-500 uppercase">Date of Satisfaction</label>
-              <input 
-                type="text" 
-                value={charge.satisfactionDate}
-                onChange={e => setCharge({ ...charge, satisfactionDate: e.target.value })}
-                className="px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[rgba(26,39,68,0.2)] focus:border-navy outline-none"
-                placeholder="DD/MM/YYYY"
-              />
-            </div>
-          )}
         </div>
 
         <div className="px-6 py-4 bg-gray-50 border-t border-gray-100 flex justify-end gap-3 shrink-0">
