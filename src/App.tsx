@@ -277,7 +277,8 @@ export default function App() {
         return { name: file.name, content: text };
       } catch (err) {
         console.error(`Error parsing ${file.name}:`, err);
-        setFiles(prev => prev.map(f => f.id === fileId ? { ...f, status: 'error', error: 'Could not read file' } : f));
+        const errorMessage = err instanceof Error ? err.message : 'Could not read file';
+        setFiles(prev => prev.map(f => f.id === fileId ? { ...f, status: 'error', error: errorMessage } : f));
         return null;
       }
     });

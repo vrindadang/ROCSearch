@@ -45,6 +45,23 @@ export async function extractTextFromPdf(file: File): Promise<string> {
       fullText += pageText + '\n';
     }
 
+    // Check for common XFA placeholder text
+    const xfaPlaceholderPhrases = [
+      "If this message is not eventually replaced by the proper contents of the document",
+      "your PDF viewer may not be able to display this type of document",
+      "Please wait... If this message is not eventually replaced"
+    ];
+
+    const isXfaPlaceholder = xfaPlaceholderPhrases.some(phrase => fullText.includes(phrase));
+    
+    if (isXfaPlaceholder) {
+      throw new Error("Dynamic XFA PDF detected. This format is not supported for automatic extraction. Please upload a flattened or standard PDF.");
+    }
+
+    if (!fullText.trim()) {
+      throw new Error("The PDF appears to be empty or contains only images/scanned content without OCR. Please provide a searchable PDF.");
+    }
+
     return fullText;
   } catch (err) {
     console.error(`Error extracting text from PDF ${file.name}:`, err);
