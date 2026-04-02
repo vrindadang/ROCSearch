@@ -44,7 +44,7 @@ export interface Charge {
   creationDate: string;
   modificationDate?: string;
   satisfactionDate?: string;
-  status: 'Open' | 'Satisfied';
+  status: 'Open';
   isModification?: boolean;
   typeOfCharge?: string;
   rateOfInterest?: string;

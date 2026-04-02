@@ -35,6 +35,10 @@ export async function extractTextFromPdf(file: File): Promise<string> {
       arrayBuffer = await file.arrayBuffer();
     }
 
+    if (arrayBuffer.byteLength === 0) {
+      throw new Error("The uploaded file is empty and cannot be read.");
+    }
+
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     let fullText = '';
 
@@ -43,6 +47,22 @@ export async function extractTextFromPdf(file: File): Promise<string> {
       const textContent = await page.getTextContent();
       const pageText = textContent.items.map((item: any) => item.str).join(' ');
       fullText += pageText + '\n';
+    }
+
+    // Check for "Please wait..." placeholder message common in XFA PDFs
+    const xfaPlaceholderIndicators = [
+      "Please wait...",
+      "To view the full contents of this document, you need a later version of the PDF viewer",
+      "Adobe Reader 8.0 or later",
+      "enable JavaScript"
+    ];
+
+    const isXfaPlaceholder = xfaPlaceholderIndicators.some(indicator => 
+      fullText.toLowerCase().includes(indicator.toLowerCase())
+    );
+
+    if (isXfaPlaceholder) {
+      throw new Error("This is a dynamic XFA PDF that cannot be parsed by standard tools. Please use a standard PDF version or an XML/MGT file if available.");
     }
 
     return fullText;

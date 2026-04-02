@@ -289,7 +289,7 @@ const companySchema = {
           creationDate: { type: Type.STRING },
           modificationDate: { type: Type.STRING },
           satisfactionDate: { type: Type.STRING },
-          status: { type: Type.STRING, enum: ["Open", "Satisfied"] },
+          status: { type: Type.STRING, enum: ["Open"] },
           isModification: { type: Type.BOOLEAN },
           typeOfCharge: { type: Type.STRING },
           rateOfInterest: { type: Type.STRING },
@@ -375,7 +375,8 @@ export async function parseCompanyFiles(fileContents: { name: string, content: s
               CHARGE EXTRACTION RULES (CRITICAL — READ ALL):
 
               1. CHARGE COUNT INTEGRITY:
-                 - The number of entries in your "charges" array with status "Open" MUST exactly equal 
+                 - Extract ONLY "Open" or "Continuing" charges. Do NOT extract "Satisfied" or "Closed" charges.
+                 - The number of entries in your "charges" array MUST exactly equal 
                    the number of charges listed in the "List of Continuing Charges" summary table.
                  - If the summary table shows 7 charges, your output must have exactly 7 charge objects.
                  - Treat a "Modification" as an update to an existing charge object, NOT a new entry.

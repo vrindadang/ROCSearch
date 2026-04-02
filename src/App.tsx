@@ -275,9 +275,11 @@ export default function App() {
         const text = await extractTextFromFile(file);
         setFiles(prev => prev.map(f => f.id === fileId ? { ...f, status: 'success' } : f));
         return { name: file.name, content: text };
-      } catch (err) {
+      } catch (err: any) {
         console.error(`Error parsing ${file.name}:`, err);
-        setFiles(prev => prev.map(f => f.id === fileId ? { ...f, status: 'error', error: 'Could not read file' } : f));
+        const message = err?.message || 'Could not read file';
+        setFiles(prev => prev.map(f => f.id === fileId ? { ...f, status: 'error', error: message } : f));
+        addLog(file.name, message, 'error');
         return null;
       }
     });
