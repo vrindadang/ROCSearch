@@ -24,7 +24,8 @@ export function ReportView({ data, metadata, onDataChange, relatedParties = [] }
   const associateSubsidiaries = data.associateSubsidiaries || [];
   const commonDirectorships = data.commonDirectorships || [];
   
-  const openCharges = charges;
+  const openCharges = charges.filter(c => c.status === 'Open' || (!c.satisfactionDate || c.satisfactionDate.trim() === '' || c.satisfactionDate.toLowerCase() === 'n/a'));
+  const satisfiedCharges = charges.filter(c => c.status === 'Satisfied' || (c.satisfactionDate && c.satisfactionDate.trim() !== '' && c.satisfactionDate.toLowerCase() !== 'n/a'));
 
   const calculateOutstandingYears = (creationDate: string, modificationDate?: string) => {
     const lastDateStr = modificationDate && 

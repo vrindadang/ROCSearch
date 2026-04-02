@@ -275,10 +275,9 @@ export default function App() {
         const text = await extractTextFromFile(file);
         setFiles(prev => prev.map(f => f.id === fileId ? { ...f, status: 'success' } : f));
         return { name: file.name, content: text };
-      } catch (err: any) {
+      } catch (err) {
         console.error(`Error parsing ${file.name}:`, err);
-        const errorMessage = err instanceof Error ? err.message : 'Could not read file';
-        setFiles(prev => prev.map(f => f.id === fileId ? { ...f, status: 'error', error: errorMessage } : f));
+        setFiles(prev => prev.map(f => f.id === fileId ? { ...f, status: 'error', error: 'Could not read file' } : f));
         return null;
       }
     });
@@ -286,14 +285,6 @@ export default function App() {
     const results = await Promise.all(extractionPromises);
     setAnalysisProgress(20);
     const fileContents = results.filter((r): r is { name: string, content: string } => r !== null);
-    
-    // Check if any files failed and show a general error if all failed
-    if (fileContents.length === 0 && uploadedFiles.length > 0) {
-      setIsAnalyzing(false);
-      setAnalysisProgress(0);
-      setError("None of the uploaded files could be read. Please check the file formats and try again.");
-      return;
-    }
 
     if (fileContents.length > 0) {
       try {

@@ -45,28 +45,6 @@ export async function extractTextFromPdf(file: File): Promise<string> {
       fullText += pageText + '\n';
     }
 
-    // Check for the Adobe Reader "Please wait..." placeholder message
-    // This indicates a dynamic XFA PDF that standard parsers cannot read
-    const xfaPlaceholder = "Please wait... If this message is not eventually replaced by the proper contents of the document, your PDF viewer may not be able to display this type of document.";
-    const normalizedText = fullText.replace(/\s+/g, ' ').trim();
-    
-    if (normalizedText.includes("Please wait...") && normalizedText.includes("your PDF viewer may not be able to display this type of document")) {
-      throw new Error("Dynamic XFA PDF detected. This format is not supported for automatic extraction. Please upload a flattened or standard PDF.");
-    }
-
-    // If text is extremely short and contains "Please wait", it's likely an XFA placeholder
-    if (normalizedText.length < 500 && normalizedText.toLowerCase().includes("please wait")) {
-       // Double check for XFA signatures in the raw content
-       const isXfa = await detectXfaRaw(arrayBuffer);
-       if (isXfa) {
-         throw new Error("Dynamic XFA PDF detected. This format is not supported for automatic extraction. Please upload a flattened or standard PDF.");
-       }
-    }
-
-    if (!normalizedText || normalizedText.length < 5) {
-      throw new Error("The PDF appears to be empty or unreadable. Please ensure it is a standard PDF with selectable text.");
-    }
-
     return fullText;
   } catch (err) {
     console.error(`Error extracting text from PDF ${file.name}:`, err);
@@ -89,9 +67,6 @@ export async function extractTextFromDocx(file: File): Promise<string> {
       arrayBuffer = await file.arrayBuffer();
     }
     const result = await mammoth.extractRawText({ arrayBuffer });
-    if (!result.value || result.value.trim().length < 5) {
-      throw new Error("The DOCX file appears to be empty or unreadable.");
-    }
     return result.value;
   } catch (err) {
     console.error(`Error extracting text from DOCX ${file.name}:`, err);
@@ -110,9 +85,6 @@ export async function extractTextFromExcel(file: File): Promise<string> {
       arrayBuffer = await file.arrayBuffer();
     }
     const workbook = XLSX.read(arrayBuffer, { type: 'array' });
-    if (!workbook.SheetNames.length) {
-      throw new Error("The Excel file appears to be empty.");
-    }
     let fullText = '';
     
     workbook.SheetNames.forEach(sheetName => {
@@ -120,10 +92,6 @@ export async function extractTextFromExcel(file: File): Promise<string> {
       const csv = XLSX.utils.sheet_to_csv(worksheet);
       fullText += `SHEET: ${sheetName}\n${csv}\n\n`;
     });
-    
-    if (!fullText.trim().length) {
-      throw new Error("The Excel file appears to be empty or unreadable.");
-    }
     
     return fullText;
   } catch (err) {
@@ -164,17 +132,4 @@ export async function parseXfaXml(xml: string): Promise<any> {
     console.error('Error parsing XFA XML:', e);
     return null;
   }
-}
-
-export async function detectXfaRaw(arrayBuffer: ArrayBuffer): Promise<boolean> {
-  const uint8Array = new Uint8Array(arrayBuffer);
-  const textDecoder = new TextDecoder();
-  const content = textDecoder.decode(uint8Array);
-  
-  // Check for XFA signatures
-  const hasXfa = content.includes('/XFA') || 
-                 content.includes('<xfa:datasets') || 
-                 content.includes('<xdp:xdp');
-                 
-  return hasXfa;
 }
