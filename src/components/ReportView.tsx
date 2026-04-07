@@ -1145,6 +1145,41 @@ function ChargeDetail({
   metadata?: { needsVerification: boolean; message: string };
   onChange?: (val: string) => void 
 }) {
+  const [isFocused, setIsFocused] = React.useState(false);
+  const strValue = String(value || '');
+  
+  const structuredPrefixes = ["Fund Based:", "Primary Security:", "Collateral", "Non-Fund Based:"];
+  const isStructured = strValue.split('\n').some(line => 
+    structuredPrefixes.some(prefix => line.trim().startsWith(prefix))
+  );
+
+  const renderStructuredTable = (val: string) => {
+    const lines = val.split('\n');
+    const rows = lines.map(line => {
+      const trimmedLine = line.trim();
+      const colonIndex = trimmedLine.indexOf(':');
+      if (colonIndex !== -1) {
+        const key = trimmedLine.substring(0, colonIndex).trim();
+        const detail = trimmedLine.substring(colonIndex + 1).trim();
+        return { key, detail };
+      }
+      return { key: '', detail: trimmedLine };
+    }).filter(row => row.key || row.detail);
+
+    return (
+      <table className="w-full border-collapse text-[9px] mt-1">
+        <tbody>
+          {rows.map((row, idx) => (
+            <tr key={idx} className="border-b border-gray-100 last:border-0">
+              <td className="py-1 pr-2 font-bold text-gray-500 w-[140px] align-top">{row.key}</td>
+              <td className="py-1 text-gray-900 align-top">{row.detail || 'NA'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    );
+  };
+
   return (
     <div className={cn(
       "flex border-b border-r border-gray-200 p-1.5 relative group", 
@@ -1154,27 +1189,41 @@ function ChargeDetail({
       <span className="w-1/3 font-bold text-gray-500 uppercase text-[8px]">{label}</span>
       <div className="flex-1 flex flex-col">
         {onChange ? (
-          <textarea 
-            className={cn(
-              "w-full font-medium text-gray-900 bg-transparent outline-none focus:bg-white resize-none",
-              (isMissing || metadata?.needsVerification) && "text-yellow-800 italic"
+          <>
+            {isStructured && !isFocused ? (
+              <div 
+                className="cursor-text min-h-[20px]" 
+                onClick={() => setIsFocused(true)}
+              >
+                {renderStructuredTable(strValue)}
+              </div>
+            ) : (
+              <textarea 
+                className={cn(
+                  "w-full font-medium text-gray-900 bg-transparent outline-none focus:bg-white resize-none",
+                  (isMissing || metadata?.needsVerification) && "text-yellow-800 italic"
+                )}
+                rows={1}
+                value={value || 'Not Available'}
+                onChange={e => onChange(e.target.value)}
+                onFocus={() => setIsFocused(true)}
+                onBlur={() => setIsFocused(false)}
+                onInput={(e) => {
+                  const target = e.target as HTMLTextAreaElement;
+                  target.style.height = 'auto';
+                  target.style.height = target.scrollHeight + 'px';
+                }}
+                autoFocus={isFocused}
+              />
             )}
-            rows={1}
-            value={value || 'Not Available'}
-            onChange={e => onChange(e.target.value)}
-            onInput={(e) => {
-              const target = e.target as HTMLTextAreaElement;
-              target.style.height = 'auto';
-              target.style.height = target.scrollHeight + 'px';
-            }}
-          />
+          </>
         ) : (
-          <span className={cn(
+          <div className={cn(
             "font-medium text-gray-900",
             (isMissing || metadata?.needsVerification) && "text-yellow-800 italic"
           )}>
-            {value || 'Not Available'}
-          </span>
+            {isStructured ? renderStructuredTable(strValue) : (value || 'Not Available')}
+          </div>
         )}
         {metadata?.needsVerification && (
           <div className="flex items-center gap-1 text-[7px] text-yellow-700 font-bold mt-0.5">

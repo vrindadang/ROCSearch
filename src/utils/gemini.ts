@@ -412,7 +412,13 @@ export async function parseCompanyFiles(fileContents: { name: string, content: s
                  - "bankName": Extract the full name of the institution.
                  - "bankAddress": Extract the COMPLETE address of the institution from the "Name and address of the charge holder" section. Do not truncate.
                    - If the address is spread across multiple lines, join them with spaces.
-                 - "propertyCharged": From "Brief Particulars of the Property Charged".
+                 - "propertyCharged": Extract this as a structured string in this EXACT format:
+                    Fund Based: [limit description]
+                    Primary Security: [text]
+                    Collateral - Immovable Property: [text or NA]
+                    Collateral - Third Party/Personal Guarantee: [text or NA]
+                    Non-Fund Based: [text or NA]
+                    IMPORTANT: Look for this information not just in the CHG-1 form's "Brief Particulars" field, but also in any attached sanction letter, Annexure, or Terms & Conditions document uploaded alongside the CHG-1. If a field is not mentioned, write "NA".
                  - "termsAndConditions": From "Terms and Conditions". 
                    - IMPORTANT: If the field says "As per attached DPN" or similar, search the document for specific details like "Rate of Interest", "Interest Rate", or any percentage (e.g., "10.40%"). If found, append it to this field.
                  - "margin": From "Margin".

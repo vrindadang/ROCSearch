@@ -23,6 +23,25 @@ import { CompanyData, ReportMetadata } from '../types';
 import { FIRM_DETAILS } from '../constants';
 import { formatCurrency, formatDate, calculateOutstandingYears } from './formatters';
 
+const formatPropertyChargedForExport = (val: string | undefined): string => {
+  if (!val) return 'Not Available';
+  const structuredPrefixes = ["Fund Based:", "Primary Security:", "Collateral", "Non-Fund Based:"];
+  const lines = val.split('\n');
+  const isStructured = lines.some(line => 
+    structuredPrefixes.some(prefix => line.trim().startsWith(prefix))
+  );
+
+  if (!isStructured) return val;
+
+  return lines.map(line => {
+    const trimmed = line.trim();
+    if (structuredPrefixes.some(p => trimmed.startsWith(p))) {
+      return trimmed;
+    }
+    return trimmed ? `  ${trimmed}` : '';
+  }).filter(l => l).join('\n');
+};
+
 export const generateWord = async (data: CompanyData, metadata: ReportMetadata) => {
   const navy = "1A2744";
   const lightGrey = "F5F5F5";
@@ -230,7 +249,7 @@ export const generateWord = async (data: CompanyData, metadata: ReportMetadata) 
             rows: [
               new TableRow({ children: [createTableCell("1. Name & Address of the Person/Institution In Whose favor Charge is Created", true, false, "F0F0F0", 40), createTableCell(`${c.bankName || 'Not Available'}${c.bankAddress ? `\n${c.bankAddress}` : '\nAddress not available in records'}`)] }),
               new TableRow({ children: [createTableCell("2. Amount Secured By the Charge", true, false, "F0F0F0", 40), createTableCell(`Rs. ${formatCurrency(c.amountSecured)}\n(${c.amountInWords || 'Amount in words not available'})`)] }),
-              new TableRow({ children: [createTableCell("3. Brief Particulars Of the Property Charged", true, false, "F0F0F0", 40), createTableCell(c.propertyCharged || "Not Available")] }),
+              new TableRow({ children: [createTableCell("3. Brief Particulars Of the Property Charged", true, false, "F0F0F0", 40), createTableCell(formatPropertyChargedForExport(c.propertyCharged))] }),
               new TableRow({ children: [createTableCell("4. Terms and Conditions", true, false, "F0F0F0", 40), createTableCell(c.termsAndConditions || "Not Available")] }),
               new TableRow({ children: [createTableCell("5. Margin", true, false, "F0F0F0", 40), createTableCell(c.margin || "Not Available")] }),
               new TableRow({ children: [createTableCell("6. Terms of repayment", true, false, "F0F0F0", 40), createTableCell(c.repaymentTerms || "Not Available")] }),
@@ -622,7 +641,7 @@ export const generatePDF = (data: CompanyData, metadata: ReportMetadata) => {
       body: [
         ['1. Name & Address of the Person/Institution In Whose favor Charge is Created', `${c.bankName || 'Not Available'}\n${c.bankAddress || 'Address not available in records'}`],
         ['2. Amount Secured By the Charge', `Rs. ${formatCurrency(c.amountSecured)}\n(${c.amountInWords || 'Amount in words not available'})`],
-        ['3. Brief Particulars Of the Property Charged', c.propertyCharged || 'Not Available'],
+        ['3. Brief Particulars Of the Property Charged', formatPropertyChargedForExport(c.propertyCharged)],
         ['4. Terms and Conditions', c.termsAndConditions || 'Not Available'],
         ['5. Margin', c.margin || 'Not Available'],
         ['6. Terms of repayment', c.repaymentTerms || 'Not Available'],
