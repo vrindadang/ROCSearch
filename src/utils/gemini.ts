@@ -282,10 +282,15 @@ const companySchema = {
           amountInWords: { type: Type.STRING },
           modifiedAmountInWords: { type: Type.STRING },
           propertyCharged: { type: Type.STRING },
+          modifiedPropertyCharged: { type: Type.STRING },
           termsAndConditions: { type: Type.STRING },
+          modifiedTermsAndConditions: { type: Type.STRING },
           margin: { type: Type.STRING },
+          modifiedMargin: { type: Type.STRING },
           repaymentTerms: { type: Type.STRING },
+          modifiedRepaymentTerms: { type: Type.STRING },
           extentOfCharge: { type: Type.STRING },
+          modifiedExtentOfCharge: { type: Type.STRING },
           creationDate: { type: Type.STRING },
           modificationDate: { type: Type.STRING },
           satisfactionDate: { type: Type.STRING },
@@ -386,12 +391,12 @@ export async function parseCompanyFiles(fileContents: { name: string, content: s
                  - DO NOT add suffixes like "(Modified)" or "(Original)".
                  - Each Charge ID must appear only once in your output.
 
-              3. ORIGINAL vs MODIFIED AMOUNTS (CRITICAL):
-                 - "amountSecured": This is the ORIGINAL creation amount. Find the CHG-1 form for "Creation of charge" (Field 3(a)).
-                 - "modifiedAmountSecured": This is the UPDATED amount. Find the CHG-1 form for "Modification of charge" (Field 3(a)).
-                 - If a charge has been modified, these two fields MUST be different.
-                 - If NO modification exists, set "modifiedAmountSecured" to 0 and "modificationDate" to "".
-                 - NEVER copy the same value into both "amountSecured" and "modifiedAmountSecured".
+              3. ORIGINAL vs MODIFIED DETAILS (CRITICAL):
+                 - "amountSecured" & "propertyCharged" & "termsAndConditions" & "margin" & "repaymentTerms" & "extentOfCharge": These are the ORIGINAL creation details. Find the CHG-1 form for "Creation of charge".
+                 - "modifiedAmountSecured" & "modifiedPropertyCharged" & "modifiedTermsAndConditions" & "modifiedMargin" & "modifiedRepaymentTerms" & "modifiedExtentOfCharge": These are the UPDATED details. Find the CHG-1 form for "Modification of charge".
+                 - If a charge has been modified, the modified fields MUST reflect the data from the modification form.
+                 - If NO modification exists for a specific field, set the "modified..." version to "" or 0 as appropriate.
+                 - NEVER copy the same value into both the original and modified version if they are different in the documents.
 
               4. AMOUNT GROUND TRUTH:
                  - The "Amount in Words" is your definitive source for numeric figures.

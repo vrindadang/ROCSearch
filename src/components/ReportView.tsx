@@ -949,19 +949,49 @@ export function ReportView({ data, metadata, onDataChange, relatedParties = [] }
                         Modification details as per MCA records:
                       </div>
                       <ChargeDetail 
-                        label="Updated Amount/Terms" 
-                        value={`${formatCurrency(c.modifiedAmountSecured || c.amountSecured)}\nModified on: ${formatDate(c.modificationDate)}`}
+                        label="1. Name & Address of the Person/Institution In Whose favor Charge is Created" 
+                        value={`${c.bankName || 'Not Available'}${c.bankAddress ? `\n${c.bankAddress}` : '\nAddress not available in records'}`} 
+                        onChange={v => {
+                          const parts = v.split('\n');
+                          updateCharge(c.id, { bankName: parts[0], bankAddress: parts.slice(1).join('\n') });
+                        }}
+                      />
+                      <ChargeDetail 
+                        label="2. Amount Secured By the Charge" 
+                        value={`Rs. ${formatCurrency(c.modifiedAmountSecured || c.amountSecured)}\n(${c.modifiedAmountInWords || c.amountInWords || 'Amount in words not available'})`} 
                         onChange={v => {
                           const parts = v.split('\n');
                           const match = parts[0].match(/[\d,]+/);
                           if (match) {
                             const num = Number(match[0].replace(/,/g, ''));
-                            updateCharge(c.id, { 
-                              modifiedAmountSecured: num, 
-                              modificationDate: parts.slice(1).join('\n').split('Modified on: ')[1] || c.modificationDate 
-                            });
+                            updateCharge(c.id, { modifiedAmountSecured: num, modifiedAmountInWords: parts.slice(1).join('\n').replace(/^\(|\)$/g, '') });
                           }
                         }}
+                      />
+                      <ChargeDetail 
+                        label="3. Brief Particulars Of the Property Charged" 
+                        value={c.modifiedPropertyCharged || c.propertyCharged || "Not Available"} 
+                        onChange={v => updateCharge(c.id, { modifiedPropertyCharged: v })}
+                      />
+                      <ChargeDetail 
+                        label="4. Terms and Conditions" 
+                        value={c.modifiedTermsAndConditions || c.termsAndConditions || "Not Available"} 
+                        onChange={v => updateCharge(c.id, { modifiedTermsAndConditions: v })}
+                      />
+                      <ChargeDetail 
+                        label="5. Margin" 
+                        value={c.modifiedMargin || c.margin || "Not Available"} 
+                        onChange={v => updateCharge(c.id, { modifiedMargin: v })}
+                      />
+                      <ChargeDetail 
+                        label="6. Terms of repayment" 
+                        value={c.modifiedRepaymentTerms || c.repaymentTerms || "Not Available"} 
+                        onChange={v => updateCharge(c.id, { modifiedRepaymentTerms: v })}
+                      />
+                      <ChargeDetail 
+                        label="7. Extent and operation of the charge" 
+                        value={c.modifiedExtentOfCharge || c.extentOfCharge || "Not Available"} 
+                        onChange={v => updateCharge(c.id, { modifiedExtentOfCharge: v })}
                       />
                     </div>
                   </div>

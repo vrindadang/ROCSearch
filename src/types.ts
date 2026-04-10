@@ -37,10 +37,15 @@ export interface Charge {
   amountInWords: string;
   modifiedAmountInWords?: string;
   propertyCharged: string;
+  modifiedPropertyCharged?: string;
   termsAndConditions: string;
+  modifiedTermsAndConditions?: string;
   margin: string;
+  modifiedMargin?: string;
   repaymentTerms: string;
+  modifiedRepaymentTerms?: string;
   extentOfCharge: string;
+  modifiedExtentOfCharge?: string;
   creationDate: string;
   modificationDate?: string;
   satisfactionDate?: string;

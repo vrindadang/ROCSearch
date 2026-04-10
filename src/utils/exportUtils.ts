@@ -261,7 +261,13 @@ export const generateWord = async (data: CompanyData, metadata: ReportMetadata) 
             new Table({
               width: { size: 100, type: WidthType.PERCENTAGE },
               rows: [
-                new TableRow({ children: [createTableCell("Updated Amount/Terms", true, false, "F0F0F0", 40), createTableCell(`Rs. ${formatCurrency(c.modifiedAmountSecured || c.amountSecured)}\nModified on: ${formatDate(c.modificationDate)}`)] })
+                new TableRow({ children: [createTableCell("1. Name & Address of the Person/Institution In Whose favor Charge is Created", true, false, "F0F0F0", 40), createTableCell(`${c.bankName || 'Not Available'}${c.bankAddress ? `\n${c.bankAddress}` : '\nAddress not available in records'}`)] }),
+                new TableRow({ children: [createTableCell("2. Amount Secured By the Charge", true, false, "F0F0F0", 40), createTableCell(`Rs. ${formatCurrency(c.modifiedAmountSecured || c.amountSecured)}\n(${c.modifiedAmountInWords || c.amountInWords || 'Amount in words not available'})`)] }),
+                new TableRow({ children: [createTableCell("3. Brief Particulars Of the Property Charged", true, false, "F0F0F0", 40), createTableCell(formatPropertyChargedForExport(c.modifiedPropertyCharged || c.propertyCharged))] }),
+                new TableRow({ children: [createTableCell("4. Terms and Conditions", true, false, "F0F0F0", 40), createTableCell(c.modifiedTermsAndConditions || c.termsAndConditions || "Not Available")] }),
+                new TableRow({ children: [createTableCell("5. Margin", true, false, "F0F0F0", 40), createTableCell(c.modifiedMargin || c.margin || "Not Available")] }),
+                new TableRow({ children: [createTableCell("6. Terms of repayment", true, false, "F0F0F0", 40), createTableCell(c.modifiedRepaymentTerms || c.repaymentTerms || "Not Available")] }),
+                new TableRow({ children: [createTableCell("7. Extent and operation of the charge", true, false, "F0F0F0", 40), createTableCell(c.modifiedExtentOfCharge || c.extentOfCharge || "Not Available")] })
               ]
             })
           ] : [])
@@ -665,7 +671,13 @@ export const generatePDF = (data: CompanyData, metadata: ReportMetadata) => {
       autoTable(doc, {
         startY: currentY,
         body: [
-          ['Updated Amount/Terms', `Rs. ${formatCurrency(c.modifiedAmountSecured || c.amountSecured)}\nModified on: ${formatDate(c.modificationDate)}`]
+          ['1. Name & Address of the Person/Institution In Whose favor Charge is Created', `${c.bankName || 'Not Available'}\n${c.bankAddress || 'Address not available in records'}`],
+          ['2. Amount Secured By the Charge', `Rs. ${formatCurrency(c.modifiedAmountSecured || c.amountSecured)}\n(${c.modifiedAmountInWords || c.amountInWords || 'Amount in words not available'})`],
+          ['3. Brief Particulars Of the Property Charged', formatPropertyChargedForExport(c.modifiedPropertyCharged || c.propertyCharged)],
+          ['4. Terms and Conditions', c.modifiedTermsAndConditions || c.termsAndConditions || 'Not Available'],
+          ['5. Margin', c.modifiedMargin || c.margin || 'Not Available'],
+          ['6. Terms of repayment', c.modifiedRepaymentTerms || c.repaymentTerms || 'Not Available'],
+          ['7. Extent and operation of the charge', c.modifiedExtentOfCharge || c.extentOfCharge || 'Not Available']
         ],
         theme: 'grid',
         styles: { fontSize: 8, cellPadding: 2 },

@@ -18,12 +18,20 @@ const INITIAL_CHARGE: Charge = {
   bankEmail: '',
   amountSecured: 0,
   amountInWords: '',
+  modifiedAmountSecured: 0,
+  modifiedAmountInWords: '',
   propertyCharged: '',
+  modifiedPropertyCharged: '',
   termsAndConditions: '',
+  modifiedTermsAndConditions: '',
   margin: '',
+  modifiedMargin: '',
   repaymentTerms: '',
+  modifiedRepaymentTerms: '',
   extentOfCharge: '',
+  modifiedExtentOfCharge: '',
   creationDate: '',
+  modificationDate: '',
   typeOfCharge: '',
   rateOfInterest: '',
   status: 'Open',
@@ -198,6 +206,48 @@ export function ManualChargeModal({ isOpen, onClose, onSave }: ManualChargeModal
               disabled
               className="px-3 py-2 border border-gray-100 rounded-lg bg-gray-50 text-gray-500 outline-none cursor-not-allowed"
             />
+          </div>
+
+          <div className="col-span-2 mt-4 pt-4 border-t border-gray-100">
+            <h3 className="text-sm font-bold text-navy mb-4 uppercase tracking-wider">Modification Details (Optional)</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-gray-500 uppercase">Modification Date</label>
+                <input 
+                  type="text" 
+                  value={charge.modificationDate}
+                  onChange={e => setCharge({ ...charge, modificationDate: e.target.value })}
+                  className="px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[rgba(26,39,68,0.2)] focus:border-navy outline-none"
+                  placeholder="DD/MM/YYYY"
+                />
+              </div>
+              <div className="flex flex-col gap-1">
+                <label className="text-xs font-bold text-gray-500 uppercase">Modified Amount (Rs.)</label>
+                <input 
+                  type="number" 
+                  value={charge.modifiedAmountSecured}
+                  onChange={e => setCharge({ ...charge, modifiedAmountSecured: Number(e.target.value) })}
+                  className="px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[rgba(26,39,68,0.2)] focus:border-navy outline-none"
+                />
+              </div>
+              <div className="flex flex-col gap-1 col-span-2">
+                <label className="text-xs font-bold text-gray-500 uppercase">Modified Property Description</label>
+                <textarea 
+                  value={charge.modifiedPropertyCharged}
+                  onChange={e => setCharge({ ...charge, modifiedPropertyCharged: e.target.value })}
+                  className="px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[rgba(26,39,68,0.2)] focus:border-navy outline-none h-20 resize-none"
+                  placeholder="Updated description if modified"
+                />
+              </div>
+              <div className="flex flex-col gap-1 col-span-2">
+                <label className="text-xs font-bold text-gray-500 uppercase">Modified Terms & Conditions</label>
+                <textarea 
+                  value={charge.modifiedTermsAndConditions}
+                  onChange={e => setCharge({ ...charge, modifiedTermsAndConditions: e.target.value })}
+                  className="px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-[rgba(26,39,68,0.2)] focus:border-navy outline-none h-20 resize-none"
+                />
+              </div>
+            </div>
           </div>
         </div>
 
