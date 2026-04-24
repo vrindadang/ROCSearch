@@ -48,28 +48,79 @@ export const generateWord = async (data: CompanyData, metadata: ReportMetadata) 
   const borderGrey = "E5E5E5";
   const openCharges = data.charges.filter(c => c.status === 'Open' || (!c.satisfactionDate || c.satisfactionDate.trim() === '' || c.satisfactionDate.toLowerCase() === 'n/a'));
 
-  const createTableCell = (text: string, isHeader = false, isAmount = false, bgColor?: string, width?: number) => {
+  const standardBorders = {
+    top: { style: BorderStyle.SINGLE, size: 4, color: navy },
+    bottom: { style: BorderStyle.SINGLE, size: 4, color: navy },
+    left: { style: BorderStyle.SINGLE, size: 4, color: navy },
+    right: { style: BorderStyle.SINGLE, size: 4, color: navy },
+    insideHorizontal: { style: BorderStyle.SINGLE, size: 1, color: borderGrey },
+    insideVertical: { style: BorderStyle.SINGLE, size: 1, color: borderGrey },
+  };
+
+  const createTableCell = (text: string, isHeader = false, isAmount = false, bgColor?: string, width?: number, colSpan?: number) => {
+    const finalBgColor = bgColor || (isHeader ? navy : "FFFFFF");
+    // Only use white text if the background is explicitly navy or if it's a default header background
+    const finalTextColor = (isHeader && finalBgColor === navy) ? "FFFFFF" : "000000";
+    
+    // Split text by newlines and create separate paragraphs for each
+    const content = text.split('\n').map(line => line.trim()).filter(line => line.length > 0);
+    const paragraphs = content.length > 0 
+      ? content.map(line => new Paragraph({
+          children: [new TextRun({
+            text: line,
+            bold: isHeader,
+            size: isHeader ? 20 : 18,
+            color: finalTextColor,
+            font: "Inter"
+          })],
+          alignment: isAmount ? AlignmentType.RIGHT : AlignmentType.LEFT,
+          spacing: { before: 40, after: 40 }
+        }))
+      : [new Paragraph({
+          children: [new TextRun({
+            text: text || " ",
+            bold: isHeader,
+            size: isHeader ? 20 : 18,
+            color: finalTextColor,
+            font: "Inter"
+          })]
+        })];
+
     return new TableCell({
       width: width ? { size: width, type: WidthType.PERCENTAGE } : undefined,
-      children: [new Paragraph({
-        children: [new TextRun({
-          text: text,
-          bold: isHeader,
-          size: isHeader ? 20 : 18,
-          color: isHeader ? "FFFFFF" : "000000"
-        })],
-        alignment: isAmount ? AlignmentType.RIGHT : AlignmentType.LEFT
-      })],
+      columnSpan: colSpan,
+      children: paragraphs,
       shading: {
-        fill: bgColor || (isHeader ? navy : "FFFFFF"),
+        fill: finalBgColor,
         type: ShadingType.CLEAR
       },
       verticalAlign: VerticalAlign.CENTER,
-      margins: { top: 100, bottom: 100, left: 100, right: 100 }
+      margins: { top: 80, bottom: 80, left: 100, right: 100 }
     });
   };
 
+  const createSectionHeading = (text: string, level: number = 2) => new Paragraph({
+    children: [new TextRun({ 
+      text, 
+      bold: true, 
+      size: level === 2 ? 24 : 20, 
+      color: navy, 
+      font: "Inter" 
+    })],
+    spacing: { before: 400, after: 200 }
+  });
+
   const doc = new Document({
+    styles: {
+      default: {
+        document: {
+          run: {
+            font: "Inter",
+            size: 18,
+          },
+        },
+      },
+    },
     sections: [{
       properties: {
         page: {
@@ -152,18 +203,26 @@ export const generateWord = async (data: CompanyData, metadata: ReportMetadata) 
         }),
 
         // Content
-        new Paragraph({ children: [new TextRun({ text: "1. Name of the Company:    ", bold: true }), new TextRun(data.companyName)], spacing: { before: 400 } }),
-        new Paragraph({ children: [new TextRun({ text: "2. Corporate Identity Number:    ", bold: true }), new TextRun(data.cin)] }),
-        new Paragraph({ children: [new TextRun({ text: "3. Registered Address:    ", bold: true }), new TextRun(data.registeredAddress)] }),
-        new Paragraph({ children: [new TextRun({ text: "4. Status:    ", bold: true }), new TextRun(data.status)] }),
-        new Paragraph({ children: [new TextRun({ text: "5. Date of Incorporation:    ", bold: true }), new TextRun(formatDate(data.incorporationDate))] }),
+        new Paragraph({ children: [new TextRun({ text: "1. Name of the Company:    ", bold: true, font: "Inter" }), new TextRun({ text: data.companyName, font: "Inter" })], spacing: { before: 400 } }),
+        new Paragraph({ children: [new TextRun({ text: "2. Corporate Identity Number:    ", bold: true, font: "Inter" }), new TextRun({ text: data.cin, font: "Inter" })] }),
+        new Paragraph({ children: [new TextRun({ text: "3. Registered Address:    ", bold: true, font: "Inter" }), new TextRun({ text: data.registeredAddress, font: "Inter" })] }),
+        new Paragraph({ children: [new TextRun({ text: "4. Status:    ", bold: true, font: "Inter" }), new TextRun({ text: data.status, font: "Inter" })] }),
+        new Paragraph({ children: [new TextRun({ text: "5. Date of Incorporation:    ", bold: true, font: "Inter" }), new TextRun({ text: formatDate(data.incorporationDate), font: "Inter" })] }),
 
-        new Paragraph({ text: "6. Directors/Signatory Details", heading: HeadingLevel.HEADING_2, spacing: { before: 400, after: 200 } }),
+        createSectionHeading("6. Directors/Signatory Details"),
         new Table({
           width: { size: 100, type: WidthType.PERCENTAGE },
+          borders: standardBorders,
           rows: [
             new TableRow({
-              children: ["S.No", "Director Name", "DIN", "Designation", "Appt. Date", "Directorships"].map(h => createTableCell(h, true))
+              children: [
+                createTableCell("S.No", true, false, navy, 5),
+                createTableCell("Director Name", true, false, navy, 30),
+                createTableCell("DIN", true, false, navy, 15),
+                createTableCell("Designation", true, false, navy, 20),
+                createTableCell("Appt. Date", true, false, navy, 15),
+                createTableCell("Directorships", true, true, navy, 15)
+              ]
             }),
             ...data.directors.map((d, i) => new TableRow({
               children: [
@@ -179,32 +238,41 @@ export const generateWord = async (data: CompanyData, metadata: ReportMetadata) 
         }),
 
         new Paragraph({ text: "7. Company Share Capital", heading: HeadingLevel.HEADING_2, spacing: { before: 400, after: 200 } }),
-        new Paragraph({ children: [new TextRun({ text: "Authorised Capital: ", bold: true }), new TextRun(formatCurrency(data.authorizedCapital) + " (" + data.authorizedCapitalWords + ")")] }),
-        new Paragraph({ children: [new TextRun({ text: "Paid Up Capital: ", bold: true }), new TextRun(formatCurrency(data.paidUpCapital) + " (" + data.paidUpCapitalWords + ")")] }),
+        new Paragraph({ children: [new TextRun({ text: "Authorised Capital: ", bold: true, font: "Inter" }), new TextRun({ text: formatCurrency(data.authorizedCapital) + " (" + data.authorizedCapitalWords + ")", font: "Inter" })] }),
+        new Paragraph({ children: [new TextRun({ text: "Paid Up Capital: ", bold: true, font: "Inter" }), new TextRun({ text: formatCurrency(data.paidUpCapital) + " (" + data.paidUpCapitalWords + ")", font: "Inter" })] }),
 
-        new Paragraph({ text: "8. Company Highlights", heading: HeadingLevel.HEADING_2, spacing: { before: 400, after: 200 } }),
+        createSectionHeading("8. Company Highlights"),
         new Table({
           width: { size: 100, type: WidthType.PERCENTAGE },
+          borders: standardBorders,
           rows: [
-            new TableRow({ children: [createTableCell("CIN", true, false, "F0F0F0"), createTableCell(data.cin), createTableCell("Authorized Capital", true, false, "F0F0F0"), createTableCell(formatCurrency(data.authorizedCapital))] }),
-            new TableRow({ children: [createTableCell("Age", true, false, "F0F0F0"), createTableCell(calculateAge(data.incorporationDate)), createTableCell("Open Charges", true, false, "F0F0F0"), createTableCell(openCharges.length.toString())] }),
-            new TableRow({ children: [createTableCell("Status", true, false, "F0F0F0"), createTableCell(data.status), createTableCell("Paid Up Capital", true, false, "F0F0F0"), createTableCell(formatCurrency(data.paidUpCapital))] }),
-            new TableRow({ children: [createTableCell("Class", true, false, "F0F0F0"), createTableCell(data.companyClass), createTableCell("Last AGM Date", true, false, "F0F0F0"), createTableCell(formatDate(data.lastAgmDate))] }),
-            new TableRow({ children: [createTableCell("Category", true, false, "F0F0F0"), createTableCell(data.companyCategory), createTableCell("Balance Sheet Date", true, false, "F0F0F0"), createTableCell(formatDate(data.lastBalanceSheetDate))] }),
-            new TableRow({ children: [createTableCell("Sub Category", true, false, "F0F0F0"), createTableCell(data.companySubCategory), createTableCell("Email ID", true, false, "F0F0F0"), createTableCell(data.email)] }),
-            new TableRow({ children: [createTableCell("Industry", true, false, "F0F0F0"), createTableCell(data.industryDescription)] }),
-            new TableRow({ children: [createTableCell("Address", true, false, "F0F0F0"), createTableCell(data.registeredAddress)] })
+            new TableRow({ children: [createTableCell("CIN", true, false, "F0F0F0", 20), createTableCell(data.cin, false, false, "FFFFFF", 30), createTableCell("Authorized Capital", true, false, "F0F0F0", 25), createTableCell(formatCurrency(data.authorizedCapital), false, true, "FFFFFF", 25)] }),
+            new TableRow({ children: [createTableCell("Age", true, false, "F0F0F0", 20), createTableCell(calculateAge(data.incorporationDate), false, false, "FFFFFF", 30), createTableCell("Open Charges", true, false, "F0F0F0", 25), createTableCell(openCharges.length.toString(), false, true, "FFFFFF", 25)] }),
+            new TableRow({ children: [createTableCell("Status", true, false, "F0F0F0", 20), createTableCell(data.status, false, false, "FFFFFF", 30), createTableCell("Paid Up Capital", true, false, "F0F0F0", 25), createTableCell(formatCurrency(data.paidUpCapital), false, true, "FFFFFF", 25)] }),
+            new TableRow({ children: [createTableCell("Class", true, false, "F0F0F0", 20), createTableCell(data.companyClass, false, false, "FFFFFF", 30), createTableCell("Last AGM Date", true, false, "F0F0F0", 25), createTableCell(formatDate(data.lastAgmDate), false, false, "FFFFFF", 25)] }),
+            new TableRow({ children: [createTableCell("Category", true, false, "F0F0F0", 20), createTableCell(data.companyCategory, false, false, "FFFFFF", 30), createTableCell("Balance Sheet Date", true, false, "F0F0F0", 25), createTableCell(formatDate(data.lastBalanceSheetDate), false, false, "FFFFFF", 25)] }),
+            new TableRow({ children: [createTableCell("Sub Category", true, false, "F0F0F0", 20), createTableCell(data.companySubCategory, false, false, "FFFFFF", 30), createTableCell("Email ID", true, false, "F0F0F0", 25), createTableCell(data.email, false, false, "FFFFFF", 25)] }),
+            new TableRow({ children: [createTableCell("Industry", true, false, "F0F0F0", 20), createTableCell(data.industryDescription, false, false, "FFFFFF", 80, 3)] }),
+            new TableRow({ children: [createTableCell("Address", true, false, "F0F0F0", 20), createTableCell(data.registeredAddress, false, false, "FFFFFF", 80, 3)] })
           ]
         }),
 
-        new Paragraph({ text: "9. Directors Info and Other Directorships", heading: HeadingLevel.HEADING_2, spacing: { before: 400, after: 200 } }),
+        createSectionHeading("9. Directors Info and Other Directorships"),
         ...data.directors.flatMap((d, idx) => [
-          new Paragraph({ text: `${idx + 1}. ${d.name} — (DIN: ${d.din})`, heading: HeadingLevel.HEADING_3, spacing: { before: 200, after: 100 } }),
+          createSectionHeading(`${idx + 1}. ${d.name} — (DIN: ${d.din})`, 3),
           new Table({
             width: { size: 100, type: WidthType.PERCENTAGE },
+            borders: standardBorders,
             rows: [
               new TableRow({
-                children: ["SNO", "Current Company", "Status", "Appointment Date", "Industry", "State"].map(h => createTableCell(h, true))
+                children: [
+                  createTableCell("SNO", true, false, navy, 5),
+                  createTableCell("Current Company", true, false, navy, 35),
+                  createTableCell("Status", true, false, navy, 10),
+                  createTableCell("Appointment Date", true, false, navy, 15),
+                  createTableCell("Industry", true, false, navy, 20),
+                  createTableCell("State", true, false, navy, 15)
+                ]
               }),
               ...(d.otherCompanies || []).map((oc, ocIdx) => new TableRow({
                 children: [
@@ -220,12 +288,21 @@ export const generateWord = async (data: CompanyData, metadata: ReportMetadata) 
           })
         ]),
 
-        new Paragraph({ text: "10. List of Continuing Charges", heading: HeadingLevel.HEADING_2, spacing: { before: 400, after: 200 } }),
+        createSectionHeading("10. List of Continuing Charges"),
         new Table({
           width: { size: 100, type: WidthType.PERCENTAGE },
+          borders: standardBorders,
           rows: [
             new TableRow({
-              children: ["Sl.No", "Charge ID", "Charge Holder Name", "Amount (In Rupees)", "Date of Creation", "Date of Last Modification", "Outstanding Years"].map(h => createTableCell(h, true))
+              children: [
+                createTableCell("Sl.No", true, false, navy, 5),
+                createTableCell("Charge ID", true, false, navy, 15),
+                createTableCell("Charge Holder Name", true, false, navy, 25),
+                createTableCell("Amount (In Rupees)", true, true, navy, 15),
+                createTableCell("Date of Creation", true, false, navy, 12),
+                createTableCell("Date of Last Modification", true, false, navy, 13),
+                createTableCell("Outstanding Years", true, false, navy, 15)
+              ]
             }),
             ...data.charges.filter(c => c.status === 'Open' || (!c.satisfactionDate || c.satisfactionDate.trim() === '' || c.satisfactionDate.toLowerCase() === 'n/a')).map((c, i) => new TableRow({
               children: [
@@ -241,11 +318,12 @@ export const generateWord = async (data: CompanyData, metadata: ReportMetadata) 
           ]
         }),
 
-        new Paragraph({ text: "11. Particulars of Charges", heading: HeadingLevel.HEADING_2, spacing: { before: 400, after: 200 } }),
+        createSectionHeading("11. Particulars of Charges"),
         ...data.charges.filter(c => c.status === 'Open' || (!c.satisfactionDate || c.satisfactionDate.trim() === '' || c.satisfactionDate.toLowerCase() === 'n/a')).flatMap((c, i) => [
-          new Paragraph({ text: `${i + 1}. Charge Created on ${formatDate(c.creationDate) || '[DATE]'} vide charge ID number ${c.id || '[ID]'}`, heading: HeadingLevel.HEADING_3, spacing: { before: 200, after: 100 } }),
+          createSectionHeading(`${i + 1}. Charge Created on ${formatDate(c.creationDate) || '[DATE]'} vide charge ID number ${c.id || '[ID]'}`, 3),
           new Table({
             width: { size: 100, type: WidthType.PERCENTAGE },
+            borders: standardBorders,
             rows: [
               new TableRow({ children: [createTableCell("1. Name & Address of the Person/Institution In Whose favor Charge is Created", true, false, "F0F0F0", 40), createTableCell(`${c.bankName || 'Not Available'}${c.bankAddress ? `\n${c.bankAddress}` : '\nAddress not available in records'}`)] }),
               new TableRow({ children: [createTableCell("2. Amount Secured By the Charge", true, false, "F0F0F0", 40), createTableCell(`Rs. ${formatCurrency(c.amountSecured)}\n(${c.amountInWords || 'Amount in words not available'})`)] }),
@@ -257,9 +335,10 @@ export const generateWord = async (data: CompanyData, metadata: ReportMetadata) 
             ]
           }),
           ...(c.modificationDate && c.modificationDate !== 'N/A' && c.modificationDate.toLowerCase() !== 'not available' && c.modificationDate.trim() !== '' ? [
-            new Paragraph({ text: `${i + 1}.1M Charge Modification on ${formatDate(c.modificationDate)} vide charge ID number ${c.id}`, heading: HeadingLevel.HEADING_3, spacing: { before: 200, after: 100 } }),
+            createSectionHeading(`${i + 1}.1M Charge Modification on ${formatDate(c.modificationDate)} vide charge ID number ${c.id}`, 3),
             new Table({
               width: { size: 100, type: WidthType.PERCENTAGE },
+              borders: standardBorders,
               rows: [
                 new TableRow({ children: [createTableCell("1. Name & Address of the Person/Institution In Whose favor Charge is Created", true, false, "F0F0F0", 40), createTableCell(`${c.bankName || 'Not Available'}${c.bankAddress ? `\n${c.bankAddress}` : '\nAddress not available in records'}`)] }),
                 new TableRow({ children: [createTableCell("2. Amount Secured By the Charge", true, false, "F0F0F0", 40), createTableCell(`Rs. ${formatCurrency(c.modifiedAmountSecured || c.amountSecured)}\n(${c.modifiedAmountInWords || c.amountInWords || 'Amount in words not available'})`)] }),
@@ -273,12 +352,20 @@ export const generateWord = async (data: CompanyData, metadata: ReportMetadata) 
           ] : [])
         ]),
 
-        new Paragraph({ text: "12. Potential Related Parties", heading: HeadingLevel.HEADING_2, spacing: { before: 400, after: 200 } }),
+        createSectionHeading("12. Potential Related Parties"),
         new Table({
           width: { size: 100, type: WidthType.PERCENTAGE },
+          borders: standardBorders,
           rows: [
             new TableRow({
-              children: ["S.No", "Current Company", "Status", "Age of Company (Years)", "State", "No. of Common Directors"].map(h => createTableCell(h, true))
+              children: [
+                createTableCell("S.No", true, false, navy, 5),
+                createTableCell("Current Company", true, false, navy, 35),
+                createTableCell("Status", true, false, navy, 10),
+                createTableCell("Age of Company (Years)", true, false, navy, 15),
+                createTableCell("State", true, false, navy, 15),
+                createTableCell("No. of Common Directors", true, true, navy, 20)
+              ]
             }),
             ...(data.potentialRelatedParties && data.potentialRelatedParties.length > 0 ? data.potentialRelatedParties.map((rp, i) => new TableRow({
               children: [
@@ -289,20 +376,32 @@ export const generateWord = async (data: CompanyData, metadata: ReportMetadata) 
                 createTableCell(rp.state, false, false, i % 2 === 0 ? "FFFFFF" : lightGrey),
                 createTableCell(rp.commonDirectorsCount.toString(), false, true, i % 2 === 0 ? "FFFFFF" : lightGrey)
               ]
-            })) : [new TableRow({ children: [createTableCell("No potential related parties identified — please verify manually", false, false, "FFFFFF")] })])
+            })) : [new TableRow({ 
+              children: [
+                new TableCell({ 
+                  children: [new Paragraph({ 
+                    children: [new TextRun({ text: "No potential related parties identified — please verify manually", font: "Inter" })],
+                    alignment: AlignmentType.CENTER 
+                  })],
+                  columnSpan: 6,
+                  margins: { top: 100, bottom: 100, left: 100, right: 100 },
+                  shading: { fill: "FFFFFF", type: ShadingType.CLEAR }
+                })
+              ] 
+            })])
           ]
         }),
 
         new Paragraph({ text: "", spacing: { before: 1000 } }),
-        new Paragraph({ children: [new TextRun({ text: "Place: Delhi", bold: true })] }),
-        new Paragraph({ children: [new TextRun({ text: `UDIN: ${metadata.udin || '____________________'}`, bold: true })] }),
+        new Paragraph({ children: [new TextRun({ text: "Place: Delhi", bold: true, font: "Inter" })] }),
+        new Paragraph({ children: [new TextRun({ text: `UDIN: ${metadata.udin || '____________________'}`, bold: true, font: "Inter" })] }),
         new Paragraph({ text: "", spacing: { before: 400 } }),
-        new Paragraph({ children: [new TextRun({ text: `For ${FIRM_DETAILS.name}`, bold: true })], alignment: AlignmentType.RIGHT }),
-        new Paragraph({ children: [new TextRun({ text: FIRM_DETAILS.type, bold: true })], alignment: AlignmentType.RIGHT }),
-        new Paragraph({ children: [new TextRun({ text: `FRN: ${FIRM_DETAILS.frn}`, bold: true })], alignment: AlignmentType.RIGHT }),
+        new Paragraph({ children: [new TextRun({ text: `For ${FIRM_DETAILS.name}`, bold: true, font: "Inter" })], alignment: AlignmentType.RIGHT }),
+        new Paragraph({ children: [new TextRun({ text: FIRM_DETAILS.type, bold: true, font: "Inter" })], alignment: AlignmentType.RIGHT }),
+        new Paragraph({ children: [new TextRun({ text: `FRN: ${FIRM_DETAILS.frn}`, bold: true, font: "Inter" })], alignment: AlignmentType.RIGHT }),
         new Paragraph({ text: "", spacing: { before: 1000 } }),
-        new Paragraph({ children: [new TextRun({ text: FIRM_DETAILS.proprietor, bold: true })], alignment: AlignmentType.RIGHT }),
-        new Paragraph({ children: [new TextRun({ text: `Proprietor | M.No. ${FIRM_DETAILS.membershipNo}`, bold: true })], alignment: AlignmentType.RIGHT })
+        new Paragraph({ children: [new TextRun({ text: FIRM_DETAILS.proprietor, bold: true, font: "Inter" })], alignment: AlignmentType.RIGHT }),
+        new Paragraph({ children: [new TextRun({ text: `Proprietor | M.No. ${FIRM_DETAILS.membershipNo}`, bold: true, font: "Inter" })], alignment: AlignmentType.RIGHT })
       ]
     }]
   });
